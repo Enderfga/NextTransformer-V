@@ -109,3 +109,44 @@ def test_training_runs_evaluates_and_resumes(packed, tmp_path, monkeypatch):
     for e in evals:
         assert all(np.isfinite(e[k]) for k in ("caption_bpb", "text_bpb", "caption_bpb_shuffled"))
     assert json.loads((run / "latest.json").read_text())["step"] == 4
+
+
+def test_coco_evaluation_runs_on_a_checkpoint(packed, tmp_path, monkeypatch):
+    import sys
+    import ntv.evaluate
+    out, tars, _, _ = packed
+    test_training_runs_evaluates_and_resumes(packed, tmp_path, monkeypatch)
+    rng = np.random.default_rng(1)
+    coco = tmp_path / "coco"
+    (coco / ntv.evaluate.IMAGE_DIR).mkdir(parents=True)
+    lines = ["filepath,sentids,filename,imgid,split,cocoid,tokens,raw,sentid"]
+    for i in range(7):
+        Image.fromarray(rng.integers(0, 255, (30, 30, 3), dtype=np.uint8)).save(coco / ntv.evaluate.IMAGE_DIR / f"{i}.jpg")
+        raw = json.dumps([f"a photo number {i}", "other"]).replace('"', '""')
+        lines.append(f'val2014,"[]",{i}.jpg,"[]",test,{i},"[]","{raw}","[]"')
+    (coco / "test_5k_mscoco_2014.csv").write_text("\n".join(lines) + "\n")
+
+    class FakeTokenizer:
+        @staticmethod
+        def from_directory(path):
+            return FakeTokenizer()
+
+        def get_bos_token_id(self):
+            return 1
+
+        def encode(self, texts, num_threads=1):
+            return [[3 + (ord(ch) % 200) for ch in t] for t in texts]
+
+    monkeypatch.setattr(ntv.evaluate, "RustBPETokenizer", FakeTokenizer)
+    monkeypatch.setattr(ntv.evaluate, "FrozenSiglip", ntv.train.FrozenSiglip)  # the stub installed above
+    run = tmp_path / "run"
+    checkpoint = run / json.loads((run / "latest.json").read_text())["checkpoint"]
+    result_path = tmp_path / "coco.json"
+    monkeypatch.setattr(sys, "argv", ["evaluate", "--checkpoint", str(checkpoint), "--coco", str(coco),
+                                      "--encoder", "unused", "--resources", str(tmp_path / "resources"),
+                                      "--out", str(result_path), "--length", "200", "--batch", "4"])
+    ntv.evaluate.main()
+    result = json.loads(result_path.read_text())
+    assert result["images"] == 7 and result["step"] == 4
+    assert 0 <= result["retrieval_raw"] <= 1 and 0 <= result["retrieval_pmi"] <= 1
+    assert np.isfinite(result["caption_bpb"]) and np.isfinite(result["caption_bpb_without_image"])

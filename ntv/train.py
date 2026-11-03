@@ -161,9 +161,9 @@ def main(argv=None):
     if args.rows_per_update % world or per_rank % args.micro_batch:
         raise ValueError("rows per update must split into whole micro-batches on every rank")
     accumulation = per_rank // args.micro_batch
-    if len(train_set) < args.updates * args.rows_per_update:
-        raise ValueError(f"{len(train_set)} packed rows; the budget needs {args.updates * args.rows_per_update}")
     stop = args.stop_after or args.updates
+    if len(train_set) < stop * args.rows_per_update:
+        raise ValueError(f"{len(train_set)} packed rows; {stop} updates need {stop * args.rows_per_update}")
     settings = Settings(config.method, args.updates, args.rows_per_update, args.micro_batch, config.sequence_len,
                         args.seed, str(args.train_rows), args.eval_rows)
 

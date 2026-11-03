@@ -17,6 +17,17 @@ from torch.utils.data import Dataset, Sampler
 IMAGE_TOKENS = 144
 
 
+def decode_image(data, size=384):
+    """JPEG bytes -> uint8 (3, size, size); a black image and True when decoding fails."""
+    try:
+        image = Image.open(BytesIO(data))
+        image.draft("RGB", (size, size))  # JPEG DCT downscaling: faster decode
+        image = image.convert("RGB").resize((size, size), Image.BILINEAR)
+        return np.asarray(image).transpose(2, 0, 1), False
+    except Exception:
+        return np.zeros((3, size, size), np.uint8), True
+
+
 class PackedRows(Dataset):
     def __init__(self, directory, tar_dir, image_size=384):
         directory = Path(directory)
@@ -42,14 +53,7 @@ class PackedRows(Dataset):
         if handle is None:
             handle = self._files[path] = open(path, "rb")
         handle.seek(int(self.offset[ref]))
-        data = handle.read(int(self.size[ref]))
-        try:
-            image = Image.open(BytesIO(data))
-            image.draft("RGB", (self.image_size, self.image_size))  # JPEG DCT downscaling: faster decode
-            image = image.convert("RGB").resize((self.image_size, self.image_size), Image.BILINEAR)
-            return np.asarray(image).transpose(2, 0, 1), False
-        except Exception:
-            return np.zeros((3, self.image_size, self.image_size), np.uint8), True
+        return decode_image(handle.read(int(self.size[ref])), self.image_size)
 
     def __getitem__(self, row):
         decoded = [self._image(ref) for ref in self.img_ref[row]]
