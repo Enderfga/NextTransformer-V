@@ -1,0 +1,11 @@
+{
+  "method": "dense_full",
+  "start": {
+    "layers": 23,
+    "mlp_width": 6144
+  },
+  "start_flops_per_token": 5995628501.578799,
+  "start_error": 0.0,
+  "rule": "admitted structure within tolerance",
+  "error": 0.0
+}

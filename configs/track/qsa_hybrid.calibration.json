@@ -1,0 +1,56 @@
+{
+  "method": "qsa_hybrid",
+  "start": {
+    "layers": 24,
+    "mlp_width": 5760
+  },
+  "start_flops_per_token": 4898177626.137027,
+  "start_error": -0.18304184042636829,
+  "rule": "v2 grid",
+  "depths": [
+    {
+      "layers": 16,
+      "flops_per_token": 3369423627.104197,
+      "ffn_slope": 296449.6878814697
+    },
+    {
+      "layers": 20,
+      "flops_per_token": 4133800626.6205816,
+      "ffn_slope": 370562.10985183716
+    },
+    {
+      "layers": 24,
+      "flops_per_token": 4898177626.137027,
+      "ffn_slope": 444674.5318222046
+    },
+    {
+      "layers": 28,
+      "flops_per_token": 5662554625.653534,
+      "ffn_slope": 518786.953792572
+    },
+    {
+      "layers": 32,
+      "flops_per_token": 6426931625.170101,
+      "ffn_slope": 592899.3757629395
+    }
+  ],
+  "candidates": [
+    {
+      "layers": 28,
+      "mlp_width": 6400,
+      "estimated_error": -0.00017516520540639124,
+      "audited_error": -0.00017516520540639124
+    },
+    {
+      "layers": 32,
+      "mlp_width": 5120,
+      "estimated_error": 0.00864755431217401
+    },
+    {
+      "layers": 32,
+      "mlp_width": 4992,
+      "estimated_error": -0.00401018792079999
+    }
+  ],
+  "error": -0.00017516520540639124
+}

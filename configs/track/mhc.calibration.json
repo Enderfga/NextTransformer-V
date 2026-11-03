@@ -1,0 +1,11 @@
+{
+  "method": "mhc",
+  "start": {
+    "layers": 23,
+    "mlp_width": 6016
+  },
+  "start_flops_per_token": 5995330137.58651,
+  "start_error": -4.976358895669719e-05,
+  "rule": "admitted structure within tolerance",
+  "error": -4.976358895669719e-05
+}
