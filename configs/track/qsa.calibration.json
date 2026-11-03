@@ -1,0 +1,171 @@
+{
+  "method": "qsa",
+  "start": {
+    "layers": 23,
+    "mlp_width": 6144
+  },
+  "start_flops_per_token": 5387603798.405545,
+  "start_error": -0.10141133711222194,
+  "rule": "v2 grid",
+  "depths": [
+    {
+      "layers": 16,
+      "flops_per_token": 3842824830.665466,
+      "ffn_slope": 296449.6878814697
+    },
+    {
+      "layers": 17,
+      "flops_per_token": 4063512847.7954473,
+      "ffn_slope": 314977.7933740616
+    },
+    {
+      "layers": 18,
+      "flops_per_token": 4284188480.868809,
+      "ffn_slope": 333505.8988666497
+    },
+    {
+      "layers": 19,
+      "flops_per_token": 4504876497.998798,
+      "ffn_slope": 352034.0043592453
+    },
+    {
+      "layers": 20,
+      "flops_per_token": 4725552131.072167,
+      "ffn_slope": 370562.10985183716
+    },
+    {
+      "layers": 21,
+      "flops_per_token": 4946240148.202165,
+      "ffn_slope": 389090.215344429
+    },
+    {
+      "layers": 22,
+      "flops_per_token": 5166915781.275541,
+      "ffn_slope": 407618.3208370209
+    },
+    {
+      "layers": 23,
+      "flops_per_token": 5387603798.405545,
+      "ffn_slope": 426146.42632961273
+    },
+    {
+      "layers": 24,
+      "flops_per_token": 5608279431.47893,
+      "ffn_slope": 444674.5318222046
+    },
+    {
+      "layers": 25,
+      "flops_per_token": 5828967448.608942,
+      "ffn_slope": 463202.63731479645
+    },
+    {
+      "layers": 26,
+      "flops_per_token": 6049643081.682335,
+      "ffn_slope": 481730.7428073883
+    },
+    {
+      "layers": 27,
+      "flops_per_token": 6270331098.812354,
+      "ffn_slope": 500258.84829998016
+    },
+    {
+      "layers": 28,
+      "flops_per_token": 6491006731.885754,
+      "ffn_slope": 518786.953792572
+    },
+    {
+      "layers": 29,
+      "flops_per_token": 6711694749.015781,
+      "ffn_slope": 537315.0592851639
+    },
+    {
+      "layers": 30,
+      "flops_per_token": 6932370382.089189,
+      "ffn_slope": 555843.1647777557
+    },
+    {
+      "layers": 31,
+      "flops_per_token": 7153058399.219224,
+      "ffn_slope": 574371.2702703476
+    },
+    {
+      "layers": 32,
+      "flops_per_token": 7373734032.292639,
+      "ffn_slope": 592899.3757629395
+    }
+  ],
+  "candidates": [
+    {
+      "layers": 26,
+      "mlp_width": 6144,
+      "estimated_error": 0.009008993817630984,
+      "audited_error": 0.009008993817630984
+    },
+    {
+      "layers": 26,
+      "mlp_width": 6016,
+      "estimated_error": -0.001275421746660288
+    },
+    {
+      "layers": 25,
+      "mlp_width": 6400,
+      "estimated_error": -0.00801937241518691
+    },
+    {
+      "layers": 25,
+      "mlp_width": 6528,
+      "estimated_error": 0.0018694887043240183
+    },
+    {
+      "layers": 27,
+      "mlp_width": 5632,
+      "estimated_error": 0.003097267767520062
+    },
+    {
+      "layers": 27,
+      "mlp_width": 5504,
+      "estimated_error": -0.007582702241551664
+    },
+    {
+      "layers": 24,
+      "mlp_width": 6912,
+      "estimated_error": -0.007645408592000802
+    },
+    {
+      "layers": 24,
+      "mlp_width": 7040,
+      "estimated_error": 0.001847898082729671
+    },
+    {
+      "layers": 28,
+      "mlp_width": 5248,
+      "estimated_error": 0.0050945650986826685
+    },
+    {
+      "layers": 28,
+      "mlp_width": 5120,
+      "estimated_error": -0.005980959355169624
+    },
+    {
+      "layers": 29,
+      "mlp_width": 4864,
+      "estimated_error": 0.0047206012754992255
+    },
+    {
+      "layers": 23,
+      "mlp_width": 7552,
+      "estimated_error": -0.0013360625827717465
+    },
+    {
+      "layers": 29,
+      "mlp_width": 4736,
+      "estimated_error": -0.006750477623133411
+    },
+    {
+      "layers": 23,
+      "mlp_width": 7680,
+      "estimated_error": 0.0077616896471783825
+    }
+  ],
+  "error": 0.009008993817630984
+}
