@@ -39,3 +39,17 @@ def test_decision_waits_for_both_seed_pairs(tmp_path):
     decision = decide({d.name: load_run(d) for d in tmp_path.iterdir()})
     assert decision["seed_spread"] is None
     assert all(d["verdict"] == "pending" for d in decision["decisions"])
+
+
+def test_secondary_analyses_render_without_entering_the_decision(tmp_path):
+    for name in ("h-rope1d", "h-nope"):
+        d = write(tmp_path, name, .999)
+        for step in (1000, 5000):
+            (d / f"hard_checkpoint_{step:08d}.json").write_text(json.dumps(dict(
+                step=step, vertical_acc2=.9, horizontal_acc2=.88, vflip_vertical_acc2=.6, hflip_horizontal_acc2=.3)))
+    runs = {d.name: load_run(d) for d in tmp_path.iterdir()}
+    assert runs["h-rope1d"]["hard"][5000]["vflip_vertical_acc2"] == .6
+    decision = decide(runs)
+    position = {"siglip": dict(row_r2=.86, col_r2=.89, row_acc=.36, col_acc=.4, chance_acc=1 / 12, test_images=256)}
+    html = render(runs, decision, position)
+    assert "R² 0.86 / 0.89" in html and "难版探针" in html and "垂直: 60.0%" in html
