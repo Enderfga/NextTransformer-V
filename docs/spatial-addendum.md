@@ -1,0 +1,41 @@
+# Addendum to the pre-registered analysis (secondary analyses)
+
+Written on 2026-11-04 after the first run (h-rope1d) was evaluated. The pre-registration
+(`docs/spatial-preregistration.md`) is unchanged: its primary metric, seed spread and decision rule still decide the
+result. Nothing below enters that decision.
+
+## Why
+
+On the first finished run (GDN hybrid, RoPE-1D, frozen SigLIP2), the pre-registered probe is at its ceiling:
+`vertical_acc2` is 99.9% at the final checkpoint and already 98.9% at update 1,000. A 5-point gain is impossible from
+there, so for the SigLIP runs the decision rule can only return "negative". What'sUp is near chance (52%) and also
+does not separate configurations. The analyses below were added to describe where position comes from with a measure
+that has room to move. They were specified before they were run on any checkpoint, and none of their settings was
+tuned on results.
+
+## Added analyses
+
+1. **Graded margin.** For every probe item, `margin2` is the loss of the opposite relation minus the loss of the true
+   one (nats), averaged by group. It is a non-saturating version of acc2.
+2. **Token-order scrambles.** The probe is scored again with the image tokens fed to the backbone in another order,
+   with their content unchanged: `vflip` reverses the rows of the 12 x 12 token grid, `hflip` reverses the columns
+   within each row, and `shuffle` applies one fixed random permutation. If a backbone reads position from token order,
+   flipping an axis inverts its answers on that axis (acc2 near 0). If it reads position from token content, for
+   example the encoder's position embedding, its answers are unaffected (acc2 near 100%).
+3. **Harder synthetic probe.** This probe uses the same captions and relations with a layout that differs from
+   training: an 8 x 8 grid instead of 4 x 4, object radius 12–18 px instead of 22–34, 3–6 distractors instead of 0–2,
+   and a jitter of 6 px. It has 2,000 images (seed 3) and is built with
+   `python -m ntv.synth eval --count 2000 --seed 3 --grid 8 --radius 12,18 --distractors 3,7 --jitter 6`.
+   The parameters were fixed before its first evaluation. It is scored at every checkpoint, together with the
+   scrambles.
+4. **Linear position probe of the visual tokens.** Ridge regression predicts each token's row and column from its
+   features, before any backbone. It is fitted on 1,024 COCO images and scored on 256 others; the penalty is chosen
+   on a held-out part of the training images. It is run for SigLIP2 features and for raw 32 px patches.
+5. **Raw-patch runs beyond the replication pair.** These are r-h-rope1d, r-h-rope2d, r-h-rope1d-conv2d, r-d-rope1d
+   and r-d-nope. Raw patches carry no position embedding, so the backbone has to supply position itself. They are
+   exploratory and were queued after all runs required by the pre-registration.
+
+## Reading
+
+All of these analyses are descriptive. Differences between runs on the harder probe are compared with the seed
+spread measured on that probe (the same two seed pairs), not with the spread of the primary metric.
