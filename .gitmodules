@@ -1,0 +1,3 @@
+[submodule "third_party/NextTransformer"]
+	path = third_party/NextTransformer
+	url = https://github.com/Interactive-Active-AI/NextTransformer.git

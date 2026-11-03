@@ -1,0 +1,26 @@
+# Local planning notes and agent scratch space
+/tasks/
+/.agent-work/
+CLAUDE.md
+.claude/
+
+# Environments and caches
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+dist/
+
+# Secrets and site-local configuration
+.env
+.env.*
+*.local.json
+*.local.toml
+
+# Data, features, checkpoints and run outputs
+/data/
+/runs/
+*.pt
+*.safetensors
+wandb/

@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nexttransformer-v"
+version = "0.0.1"
+description = "A multimodal track for NextTransformer: backbone comparison with frozen vision-encoder tokens"
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "nexttransformer",
+    "torch==2.9.1",
+    "transformers>=5.0",
+    "pillow>=11",
+    "boto3>=1.35",
+    "setuptools>=70",
+]
+
+[project.optional-dependencies]
+gpu = ["torch==2.9.1"]
+cpu = ["torch==2.9.1"]
+
+[dependency-groups]
+dev = ["pytest==8.4.2", "pytest-xdist==3.8.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["ntv"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: long checks, skipped by default"]
+addopts = "-m 'not slow'"
+
+[tool.uv.sources]
+nexttransformer = { path = "third_party/NextTransformer", editable = true }
+torch = [{ index = "pytorch-cpu", extra = "cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv]
+default-groups = ["dev"]
+conflicts = [[{ extra = "cpu" }, { extra = "gpu" }]]
