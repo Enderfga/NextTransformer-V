@@ -169,3 +169,40 @@ def test_spatial_variants_audit_without_unknown_operators(spatial):
     assert other["unknown"] == {} and base["unknown"] == {}
     # Debug width 48 inflates the share of the 3 x 3 convolution; the formal-size share is checked separately.
     assert 0 < other["total"] - base["total"] < .05 * base["total"]
+
+
+def test_scrambles_move_tokens_and_keep_their_content():
+    from ntv.spatial_eval import Scrambled, scramble_index
+
+    grid = torch.arange(144.).view(1, 12, 12)  # each token's value is its raster position
+    rows, cols = grid // 12, grid % 12
+
+    class Encoder(torch.nn.Module):
+        def forward(self, images):
+            return torch.stack([rows, cols], -1).repeat(images.shape[0], 1, 1, 1).view(-1, 2)
+
+    images = torch.zeros(2, 3, 384, 384, dtype=torch.uint8)
+    out = {m: Scrambled(Encoder(), scramble_index(m))(images).view(2, 12, 12, 2) for m in ("vflip", "hflip", "shuffle")}
+    assert torch.equal(out["vflip"][..., 0], 11 - rows.expand(2, -1, -1))  # rows reversed, columns kept
+    assert torch.equal(out["vflip"][..., 1], cols.expand(2, -1, -1))
+    assert torch.equal(out["hflip"][..., 1], 11 - cols.expand(2, -1, -1))
+    assert torch.equal(out["hflip"][..., 0], rows.expand(2, -1, -1))
+    seen = out["shuffle"][0, ..., 0] * 12 + out["shuffle"][0, ..., 1]
+    assert sorted(seen.flatten().tolist()) == list(range(144)) and not torch.equal(seen, grid[0])
+    assert torch.equal(scramble_index("shuffle"), scramble_index("shuffle"))
+
+
+def test_position_probe_reads_position_only_when_tokens_carry_it():
+    from ntv.position_probe import fit
+
+    g = torch.Generator().manual_seed(0)
+    n, d = 40, 32
+    noise = torch.randn(n, 144, d, generator=g)
+    pos = torch.arange(144.)
+    coords = torch.stack([pos // 12, pos % 12], 1) / 11
+    embed = coords @ torch.randn(2, d, generator=g)  # a smooth position embedding, as a ViT's is
+    with_position = noise * .1 + embed
+    carried = fit(with_position[:30], with_position[30:])
+    absent = fit(noise[:30], noise[30:])
+    assert carried["row_r2"] > .95 and carried["col_r2"] > .95 and carried["row_acc"] > .9
+    assert absent["row_r2"] < .1 and absent["col_acc"] < .2

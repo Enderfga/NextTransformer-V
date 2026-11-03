@@ -205,6 +205,9 @@ def test_spatial_probe_runs_on_a_spatial_checkpoint(packed, tmp_path, monkeypatc
     assert result["images"] == 6 and result["conv2d"] == "k" and result["position"] == "rope2d"
     assert 0 <= result["all_acc4"] <= 1 and 0 <= result["all_acc2"] <= 1
     assert result["horizontal_count"] + result["vertical_count"] == 6
+    for mode in ("vflip", "hflip", "shuffle"):
+        assert 0 <= result[f"{mode}_vertical_acc2"] <= 1 and np.isfinite(result[f"{mode}_all_margin2"])
+    assert np.isfinite(result["vertical_margin2"]) and "vflip_all_count" not in result
 
 
 def test_text_buffer_conserves_tokens_and_drains_long_documents():
