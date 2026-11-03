@@ -138,7 +138,6 @@ def test_coco_evaluation_runs_on_a_checkpoint(packed, tmp_path, monkeypatch):
             return [[3 + (ord(ch) % 200) for ch in t] for t in texts]
 
     monkeypatch.setattr(ntv.evaluate, "RustBPETokenizer", FakeTokenizer)
-    monkeypatch.setattr(ntv.evaluate, "FrozenSiglip", ntv.train.FrozenSiglip)  # the stub installed above
     run = tmp_path / "run"
     checkpoint = run / json.loads((run / "latest.json").read_text())["checkpoint"]
     result_path = tmp_path / "coco.json"
@@ -150,3 +149,55 @@ def test_coco_evaluation_runs_on_a_checkpoint(packed, tmp_path, monkeypatch):
     assert result["images"] == 7 and result["step"] == 4
     assert 0 <= result["retrieval_raw"] <= 1 and 0 <= result["retrieval_pmi"] <= 1
     assert np.isfinite(result["caption_bpb"]) and np.isfinite(result["caption_bpb_without_image"])
+
+
+def test_spatial_probe_runs_on_a_spatial_checkpoint(packed, tmp_path, monkeypatch):
+    import sys
+    import ntv.evaluate
+    import ntv.spatial_eval
+    from ntv.synth import write_eval
+    out, tars, _, _ = packed
+
+    class StubEncoder(torch.nn.Module):
+        def __init__(self, path, device):
+            super().__init__()
+            self.proj = torch.randn(3, 4608, generator=torch.Generator().manual_seed(0))
+
+        def forward(self, images):
+            return (images.float().mean((2, 3)) / 255 @ self.proj).repeat_interleave(IMAGE_TOKENS, 0)
+
+    class FakeTokenizer:
+        @staticmethod
+        def from_directory(path):
+            return FakeTokenizer()
+
+        def get_bos_token_id(self):
+            return 1
+
+        def encode(self, texts, num_threads=1):
+            return [[3 + (ord(ch) % 200) for ch in t] for t in texts]
+
+    monkeypatch.setattr(ntv.train, "FrozenSiglip", StubEncoder)
+    monkeypatch.setattr(ntv.spatial_eval, "RustBPETokenizer", FakeTokenizer)
+    resources = tmp_path / "resources" / "tokenizer"
+    resources.mkdir(parents=True)
+    torch.save(torch.ones(VOCAB, dtype=torch.int32), resources / "token_bytes.pt")
+    run = tmp_path / "run"
+    ntv.train.main(["--method", "gdn_hybrid", "--shape", "width=48,heads=2,layers=4,mlp_width=192",
+                    "--train-rows", str(out), "--val-rows", str(out), "--tars", str(tars), "--encoder", "unused",
+                    "--resources", str(resources.parent), "--output", str(run), "--updates", "2",
+                    "--rows-per-update", "2", "--micro-batch", "1", "--sequence-len", str(T), "--eval-every", "2",
+                    "--eval-rows", "2", "--checkpoint-every", "2", "--log-every", "1", "--workers", "0",
+                    "--position", "rope2d", "--order", "hilbert", "--conv2d", "k"])
+    probe = tmp_path / "probe"
+    write_eval(probe, 6, seed=3)
+    checkpoint = run / json.loads((run / "latest.json").read_text())["checkpoint"]
+    result_path = tmp_path / "spatial.json"
+    monkeypatch.setattr(sys, "argv", ["spatial_eval", "--checkpoint", str(checkpoint), "--probe", str(probe),
+                                      "--resources", str(resources.parent), "--out", str(result_path),
+                                      "--batch", "8"])
+    ntv.spatial_eval.main()
+    result = json.loads(result_path.read_text())
+    assert result["images"] == 6 and result["conv2d"] == "k" and result["position"] == "rope2d"
+    assert 0 <= result["all_acc4"] <= 1 and 0 <= result["all_acc2"] <= 1
+    assert result["horizontal_count"] + result["vertical_count"] == 6

@@ -23,21 +23,25 @@ import torch
 from nanochat.tokenizer import RustBPETokenizer
 from nexttransformer.models.config import ModelConfig
 from ntv.data import IMAGE_TOKENS, decode_image
-from ntv.encoder import FrozenSiglip
 from ntv.model import build_mm_model, visual_inputs
 
 IMAGE_DIR = "images/images_mscoco_2014_5k_test"
 
 
-def load_model(checkpoint, device):
+def load_model(checkpoint, device, encoder_path=None):
+    """The checkpoint's model, with its visual input and spatial settings, and the matching encoder."""
+    from ntv.train import visual_encoder
     saved = torch.load(Path(checkpoint) / "model.pt", map_location="cpu", weights_only=False)
     fields = {k: tuple(v) if isinstance(v, list) else v for k, v in saved["model_config"].items()}
     config = ModelConfig(**fields)
-    model = build_mm_model(config, device)
+    train = saved.get("train_config", {})
+    spatial = {k: train.get(k, d) for k, d in (("order", "raster"), ("position", "rope1d"), ("conv2d", "none"))}
+    encoder, visual_dim = visual_encoder(train.get("visual", "siglip"), encoder_path, device)
+    model = build_mm_model(config, device, visual_dim=visual_dim, spatial=spatial)
     model.load_state_dict(saved["model"], strict=True)
     model.set_step(saved["state"]["step"])
     model.eval()
-    return model, config, saved["state"]["step"]
+    return model, config, saved["state"]["step"], encoder, dict(spatial, visual=train.get("visual", "siglip"))
 
 
 def rows(examples, length, bos, with_image):
@@ -107,8 +111,7 @@ def main():
     token_bytes = torch.load(args.resources / "tokenizer" / "token_bytes.pt", map_location="cpu")
     caption_bytes = np.array([int(token_bytes[torch.tensor(c)].sum()) for c in captions])
 
-    model, config, step = load_model(args.checkpoint, device)
-    encoder = FrozenSiglip(str(args.encoder), device)
+    model, config, step, encoder, settings = load_model(args.checkpoint, device, args.encoder)
     n = len(records)
     true_nats, true_counts = caption_losses(model, encoder, [(i, captions[i]) for i in range(n)], images,
                                             args.length, bos, device, args.batch)
@@ -122,7 +125,7 @@ def main():
     wrong_prior = prior_nats[np.stack(distractors)]
     raw = (true_nats / true_counts)[:, None] < (wrong_nats / wrong_counts)
     pmi = (prior_nats - true_nats)[:, None] > (wrong_prior - wrong_nats)
-    result = dict(method=config.method, step=step, checkpoint=str(args.checkpoint), images=n,
+    result = dict(method=config.method, step=step, checkpoint=str(args.checkpoint), images=n, **settings,
                   bad_images=int(sum(bad for _, bad in decoded)),
                   caption_bpb=float(true_nats.sum() / (math.log(2) * caption_bytes.sum())),
                   caption_bpb_without_image=float(prior_nats.sum() / (math.log(2) * caption_bytes.sum())),

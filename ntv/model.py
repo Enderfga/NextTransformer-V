@@ -89,16 +89,24 @@ def attach_visual(model, visual_dim=VISUAL_DIM, seed=42):
     return model
 
 
-def build_mm_model(config, device="cpu", seed=42, visual_dim=VISUAL_DIM):
-    return attach_visual(build_model(config, device, seed), visual_dim, seed)
+def build_mm_model(config, device="cpu", seed=42, visual_dim=VISUAL_DIM, spatial=None):
+    """`spatial`: optional dict(order=..., position=..., conv2d=...) for ntv.spatial.attach_spatial."""
+    model = attach_visual(build_model(config, device, seed), visual_dim, seed)
+    if spatial:
+        from ntv.spatial import attach_spatial
+        attach_spatial(model, seed=seed, **spatial)
+    return model
 
 
 @contextmanager
-def visual_inputs(model, image_mask, features):
+def visual_inputs(model, image_mask, features, index=None):
     """Make (image_mask, features) visible to the hooks for one forward call.
 
-    image_mask: (B, T) bool, True at image positions.
-    features:   (image_mask.sum(), visual_dim), in row-major order of the True positions.
+    image_mask: (B, T) bool, True at image positions; each image is a contiguous run of 144 positions.
+    features:   (image_mask.sum(), visual_dim): each image's tokens in row-major grid order (the encoder's
+                order); a spatial patch order, if configured, is applied here.
+    index:      flat indices of the image positions; computed from image_mask when omitted (pass it for
+                shape-only audits, where it cannot be computed).
     `model` is the unwrapped module (pass `ddp.module` when training with DDP).
     """
     if image_mask.dtype != torch.bool or image_mask.ndim != 2:
@@ -110,11 +118,24 @@ def visual_inputs(model, image_mask, features):
         raise ValueError("one feature row is required per image position")
     if model._visual is not None:
         raise RuntimeError("visual inputs are already set")
+    spatial = getattr(model, "spatial", None)
+    swapped = None
+    if spatial is not None:
+        from ntv.spatial import TOKENS, rotary_tables
+        features = features.view(-1, TOKENS, features.shape[-1])[:, model._order].reshape(-1, features.shape[-1])
+        model._visual_index = image_mask.reshape(-1).nonzero().squeeze(1) if index is None else index
+        if spatial["position"] != "rope1d" and not shape_only:
+            swapped = (model.cos, model.sin)
+            model.cos, model.sin = rotary_tables(model, image_mask, model._order, spatial["position"])
     model._visual = (image_mask, features)
     try:
         yield
     finally:
         model._visual = None
+        if spatial is not None:
+            model._visual_index = None
+        if swapped is not None:
+            model.cos, model.sin = swapped
 
 
 def text_only(model, idx):

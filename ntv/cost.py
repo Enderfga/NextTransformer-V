@@ -20,12 +20,20 @@ from ntv.model import VISUAL_DIM, build_mm_model, visual_inputs
 
 
 class TrackLedger(Ledger):
-    """NextTransformer's ledger plus the data-movement operators of the visual hooks.
+    """NextTransformer's ledger plus the operators of the visual and spatial hooks.
 
-    `masked_scatter` copies projected features into image positions and its backward selects their
-    gradients: data movement, which the ledger keeps outside the FLOP account (like `index_put`).
+    `masked_scatter` (and its backward) and `index_select` move data: outside the FLOP account, like `index_put`.
+    `index_add`, the backward of `index_select`, accumulates one value per source element, like `scatter_add`.
     """
-    ZERO = Ledger.ZERO | {"masked_scatter", "masked_scatter_backward"}
+    ZERO = Ledger.ZERO | {"masked_scatter", "masked_scatter_backward", "index_select"}
+
+    def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+        name = func._schema.name.split("::")[-1]
+        if name in ("index_add", "index_add_"):
+            result = func(*args, **(kwargs or {}))
+            self.add(str(func), args[3].numel())
+            return result
+        return super().__torch_dispatch__(func, types, args, kwargs)
 
 
 @dataclass(frozen=True)
@@ -73,7 +81,7 @@ def stage_start_step(config, stage, steps):
     return config.burnin_steps + 1
 
 
-def audit_mm(config, track=Track(), *, stage="joint", depth=None, optimizer=True, images=True):
+def audit_mm(config, track=Track(), *, stage="joint", depth=None, optimizer=True, images=True, spatial=None):
     """One logical update (track.rows x track.sequence_len tokens), counted with the ledger."""
     t, rows = config.sequence_len, track.rows
     if t != track.sequence_len:
@@ -86,9 +94,10 @@ def audit_mm(config, track=Track(), *, stage="joint", depth=None, optimizer=True
         raise ValueError("a model dimension equals the chunk length; C x C tiles would be ambiguous")
     mask = nominal_image_mask(track, t, rows) if images else torch.zeros((rows, t), dtype=torch.bool)
     image_positions = int(mask.sum())
+    index = mask.reshape(-1).nonzero().squeeze(1)
     ledger = TrackLedger(pair)
     with FakeTensorMode(allow_non_fake_inputs=True):
-        model = build_mm_model(config, "cpu", visual_dim=track.visual_dim)
+        model = build_mm_model(config, "cpu", visual_dim=track.visual_dim, spatial=spatial)
         model.set_training_stage(stage_start_step(config, stage, track.steps))
         if config.method == "huginn":
             if depth is None:
@@ -96,7 +105,7 @@ def audit_mm(config, track=Track(), *, stage="joint", depth=None, optimizer=True
             model.accounting_depth = depth
         x = torch.zeros((rows, t), dtype=torch.long)
         features = torch.zeros((image_positions, track.visual_dim))
-        with attention_rules(model, ledger, stage), ledger, visual_inputs(model, mask, features):
+        with attention_rules(model, ledger, stage), ledger, visual_inputs(model, mask, features, index):
             loss = model(x, x)
             ledger.phase = "backward"
             loss.backward()

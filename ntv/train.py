@@ -26,7 +26,13 @@ from nexttransformer.runtime.checkpoint import load_checkpoint, save_checkpoint
 from nexttransformer.training.optimizer import build_optimizer
 from ntv.data import IMAGE_TOKENS, PackedRows, RankRows, collate
 from ntv.encoder import FrozenSiglip
-from ntv.model import build_mm_model, track_config, visual_inputs
+from ntv.model import VISUAL_DIM, build_mm_model, track_config, visual_inputs
+from ntv.spatial import ORDERS, POSITIONS, RAW_DIM, RawPatches
+
+
+def visual_encoder(kind, path, device):
+    """(encoder, feature width) for --visual."""
+    return (FrozenSiglip(str(path), device), VISUAL_DIM) if kind == "siglip" else (RawPatches(), RAW_DIM)
 
 
 @dataclass(frozen=True)
@@ -48,6 +54,10 @@ class Settings:
     seed: int
     train_rows: str
     eval_rows: int
+    visual: str = "siglip"
+    order: str = "raster"
+    position: str = "rope1d"
+    conv2d: str = "none"
 
 
 class Cursor:
@@ -88,6 +98,12 @@ def parse(argv=None):
     p.add_argument("--workers", type=int, default=10)
     p.add_argument("--flops-per-token", type=float, help="audited training FLOPs per token, for throughput logs")
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--visual", choices=("siglip", "raw32"), default="siglip",
+                   help="frozen SigLIP2 features or raw 32 px patches")
+    p.add_argument("--order", choices=ORDERS, default="raster", help="patch order of each image in the sequence")
+    p.add_argument("--position", choices=POSITIONS, default="rope1d", help="position mode of the attention layers")
+    p.add_argument("--conv2d", choices=("none", "k", "qkv"), default="none",
+                   help="2D short convolution at image positions in linear-attention layers")
     return p.parse_args(argv)
 
 
@@ -165,9 +181,11 @@ def main(argv=None):
     if len(train_set) < stop * args.rows_per_update:
         raise ValueError(f"{len(train_set)} packed rows; {stop} updates need {stop * args.rows_per_update}")
     settings = Settings(config.method, args.updates, args.rows_per_update, args.micro_batch, config.sequence_len,
-                        args.seed, str(args.train_rows), args.eval_rows)
-
-    model = build_mm_model(config, device, seed=args.seed)
+                        args.seed, str(args.train_rows), args.eval_rows, args.visual, args.order, args.position,
+                        args.conv2d)
+    spatial = dict(order=args.order, position=args.position, conv2d=args.conv2d)
+    encoder, visual_dim = visual_encoder(args.visual, args.encoder, device)
+    model = build_mm_model(config, device, seed=args.seed, visual_dim=visual_dim, spatial=spatial)
     if config.has_sparse:
         model.set_sparse_backend(args.sparse_backend)
     optimizer = build_optimizer(model)  # NextTransformer's groups; the track keeps its LRs and batch tokens
@@ -180,7 +198,6 @@ def main(argv=None):
     start = cursor.update
     model.set_training_stage(start)
     wrapped = DDP(model, device_ids=[local], broadcast_buffers=False) if world > 1 else model
-    encoder = FrozenSiglip(str(args.encoder), device)
     token_bytes = torch.load(args.resources / "tokenizer" / "token_bytes.pt", map_location=device)
     schedule = Schedule(args.updates)
 
