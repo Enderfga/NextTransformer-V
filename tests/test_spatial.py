@@ -206,3 +206,15 @@ def test_position_probe_reads_position_only_when_tokens_carry_it():
     absent = fit(noise[:30], noise[30:])
     assert carried["row_r2"] > .95 and carried["col_r2"] > .95 and carried["row_acc"] > .9
     assert absent["row_r2"] < .1 and absent["col_acc"] < .2
+
+
+def test_harder_probe_layout(tmp_path):
+    import json
+    from ntv.synth import write_eval
+
+    write_eval(tmp_path, 60, seed=3, grid=8, radius=(12, 18), distractors=(3, 7), jitter=6)
+    items = [json.loads(line) for line in open(tmp_path / "eval.jsonl")]
+    distances = {item["distance"] for item in items}
+    assert distances <= set(range(1, 8)) and max(distances) > 3
+    assert {item["axis"] for item in items} == {"horizontal", "vertical"}
+    assert all(len(set(item["candidates"].values())) == 4 for item in items)
