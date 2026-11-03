@@ -98,6 +98,7 @@ def main():
     parser.add_argument("--batch", type=int, default=64)
     parser.add_argument("--limit", type=int, help="first N images only (quick checks)")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--whatsup", type=Path, help="What'sUp probe directory (default: <coco>/../whatsup)")
     args = parser.parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -133,6 +134,14 @@ def main():
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))
+    whatsup = args.whatsup or args.coco.parent / "whatsup"
+    if (whatsup / "eval.jsonl").exists():  # the real-image spatial probe, next to COCO when downloaded
+        from ntv.spatial_eval import probe
+        spatial = dict(method=config.method, step=step, checkpoint=str(args.checkpoint), **settings,
+                       **probe(model, encoder, whatsup, tok, device, batch=args.batch))
+        target = args.out.parent / f"whatsup_{args.checkpoint.name}.json"
+        target.write_text(json.dumps(spatial, indent=2) + "\n")
+        print(json.dumps({k: v for k, v in spatial.items() if "acc" in k}, indent=1))
 
 
 if __name__ == "__main__":

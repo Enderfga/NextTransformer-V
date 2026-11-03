@@ -26,6 +26,35 @@ OPPOSITE = {"to the left of": "to the right of", "to the right of": "to the left
             "below": "above", "on": "under", "under": "on"}
 
 
+def probe(model, encoder, directory, tok, device, length=200, batch=64, limit=None):
+    """Accuracies of a loaded model on the probe in `directory` (eval.jsonl + images)."""
+    items = [json.loads(line) for line in open(Path(directory) / "eval.jsonl")][:limit]
+    images = [decode_image((Path(directory) / item["image"]).read_bytes())[0] for item in items]
+    bos = tok.get_bos_token_id()
+    relations = list(items[0]["candidates"])  # the same candidate relations, in the same order, for every item
+    if any(list(item["candidates"]) != relations for item in items):
+        raise ValueError("every probe item needs the same candidate relations")
+    ids = tok.encode([item["candidates"][r] for item in items for r in relations], num_threads=8)
+    n, k = len(items), len(relations)
+    with_image, _ = caption_losses(model, encoder, [(i // k, ids[i]) for i in range(n * k)], images,
+                                   length, bos, device, batch)
+    without, _ = caption_losses(model, encoder, [(None, ids[i]) for i in range(n * k)], images,
+                                length, bos, device, batch)
+    with_image, without = with_image.reshape(n, k), without.reshape(n, k)
+    groups = defaultdict(lambda: [0, 0, 0])  # acc4 hits, acc2 hits, count
+    for i, item in enumerate(items):
+        true, opposite = relations.index(item["relation"]), relations.index(OPPOSITE[item["relation"]])
+        hit4 = int(np.argmax(without[i] - with_image[i]) == true)
+        hit2 = int(with_image[i, true] < with_image[i, opposite])
+        for key in ("all", item["axis"], f"{item['axis']}_d{item['distance']}"):
+            groups[key][0] += hit4
+            groups[key][1] += hit2
+            groups[key][2] += 1
+    return dict(images=n, **{f"{key}_acc4": a / c for key, (a, _, c) in sorted(groups.items())},
+                **{f"{key}_acc2": b / c for key, (_, b, c) in sorted(groups.items())},
+                **{f"{key}_count": c for key, (_, _, c) in sorted(groups.items())})
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--checkpoint", type=Path, required=True)
@@ -39,35 +68,10 @@ def main():
     args = parser.parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    items = [json.loads(line) for line in open(args.probe / "eval.jsonl")][:args.limit]
-    images = [decode_image((args.probe / item["image"]).read_bytes())[0] for item in items]
     tok = RustBPETokenizer.from_directory(str(args.resources / "tokenizer"))
-    bos = tok.get_bos_token_id()
-    relations = list(items[0]["candidates"])  # the same candidate relations, in the same order, for every item
-    if any(list(item["candidates"]) != relations for item in items):
-        raise ValueError("every probe item needs the same candidate relations")
-    texts = [item["candidates"][r] for item in items for r in relations]
-    ids = tok.encode(texts, num_threads=8)
     model, config, step, encoder, settings = load_model(args.checkpoint, device, args.encoder)
-    n, k = len(items), len(relations)
-    with_image, _ = caption_losses(model, encoder, [(i // k, ids[i]) for i in range(n * k)], images,
-                                   args.length, bos, device, args.batch)
-    without, _ = caption_losses(model, encoder, [(None, ids[i]) for i in range(n * k)], images,
-                                args.length, bos, device, args.batch)
-    with_image, without = with_image.reshape(n, k), without.reshape(n, k)
-    groups = defaultdict(lambda: [0, 0, 0])  # acc4 hits, acc2 hits, count
-    for i, item in enumerate(items):
-        true, opposite = relations.index(item["relation"]), relations.index(OPPOSITE[item["relation"]])
-        hit4 = int(np.argmax(without[i] - with_image[i]) == true)
-        hit2 = int(with_image[i, true] < with_image[i, opposite])
-        for key in ("all", item["axis"], f"{item['axis']}_d{item['distance']}"):
-            groups[key][0] += hit4
-            groups[key][1] += hit2
-            groups[key][2] += 1
-    result = dict(method=config.method, step=step, checkpoint=str(args.checkpoint), images=n, **settings,
-                  **{f"{key}_acc4": a / c for key, (a, _, c) in sorted(groups.items())},
-                  **{f"{key}_acc2": b / c for key, (_, b, c) in sorted(groups.items())},
-                  **{f"{key}_count": c for key, (_, _, c) in sorted(groups.items())})
+    result = dict(method=config.method, step=step, checkpoint=str(args.checkpoint), **settings,
+                  **probe(model, encoder, args.probe, tok, device, args.length, args.batch, args.limit))
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps({k: (round(v, 4) if isinstance(v, float) else v) for k, v in result.items()}, indent=1))

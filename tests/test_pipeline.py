@@ -144,9 +144,13 @@ def test_coco_evaluation_runs_on_a_checkpoint(packed, tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["evaluate", "--checkpoint", str(checkpoint), "--coco", str(coco),
                                       "--encoder", "unused", "--resources", str(tmp_path / "resources"),
                                       "--out", str(result_path), "--length", "200", "--batch", "4"])
+    from ntv.synth import write_eval
+    write_eval(tmp_path / "whatsup", 4, seed=3)  # any probe in the eval format, next to the COCO directory
     ntv.evaluate.main()
     result = json.loads(result_path.read_text())
     assert result["images"] == 7 and result["step"] == 4
+    whatsup = json.loads((tmp_path / f"whatsup_{checkpoint.name}.json").read_text())
+    assert whatsup["images"] == 4 and 0 <= whatsup["all_acc2"] <= 1
     assert 0 <= result["retrieval_raw"] <= 1 and 0 <= result["retrieval_pmi"] <= 1
     assert np.isfinite(result["caption_bpb"]) and np.isfinite(result["caption_bpb_without_image"])
 
