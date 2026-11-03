@@ -6,6 +6,7 @@
 #   cc3m <first> <last>         webdataset shards cc3m-train-<first>..<last> (inclusive)
 #   siglip2                     frozen vision encoder
 #   coco5k                      COCO 2014 Karpathy 5k test images and captions (evaluation)
+#   whatsup                     What'sUp controlled images (spatial evaluation)
 set -euo pipefail
 : "${NTV_ROOT:?set NTV_ROOT}"
 HF="$(pwd)/.venv/bin/hf"
@@ -15,6 +16,7 @@ CC12M_REV=796118f2eabdb9984f23f7f15d1e74d388612fc6
 CC3M_REV=46f3d69f840e59d77d52e8decfe5baec97e94c7f
 SIGLIP2_REV=dd658faac399427308559e2c3ac1e99cbe43845d
 COCO5K_REV=551c4f7667f06fa82b4ef0a07617bfc4cf324ac3
+WHATSUP_REV=373b38706ec0f20a2506f61d6e7cae92aa89da31
 case "$1" in
   climbmix)
     files=$(printf "shard_%05d.parquet " $(seq 0 $(( $2 - 1 ))))
@@ -35,6 +37,9 @@ case "$1" in
       --local-dir "$D/coco5k"
     [ -d "$D/coco5k/images" ] || .venv/bin/python -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" \
       "$D/coco5k/images_mscoco_2014_5k_test.zip" "$D/coco5k/images" ;;
+  whatsup)
+    "$HF" download amitakamath2/whatsup_vlms --repo-type dataset --revision "$WHATSUP_REV" --local-dir "$D/whatsup"
+    .venv/bin/python -m ntv.whatsup --root "$D/whatsup" ;;
   *) echo "unknown item: $1" >&2; exit 2 ;;
 esac
 echo "done: $*"

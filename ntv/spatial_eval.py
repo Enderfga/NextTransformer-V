@@ -1,4 +1,5 @@
-"""Spatial-relation accuracy of a checkpoint on the synthetic probe (ntv.synth eval set), on one GPU.
+"""Spatial-relation accuracy of a checkpoint on a probe in the ntv.synth eval format (the synthetic set or
+What'sUp via ntv.whatsup), on one GPU.
 
 Every image has four candidate captions that differ only in the relation. Two scores:
 - `acc4`: the candidate whose likelihood gains most from seeing the image (loss without the image minus loss with
@@ -20,10 +21,9 @@ import torch
 from nanochat.tokenizer import RustBPETokenizer
 from ntv.data import decode_image
 from ntv.evaluate import caption_losses, load_model
-from ntv.synth import RELATIONS
 
 OPPOSITE = {"to the left of": "to the right of", "to the right of": "to the left of", "above": "below",
-            "below": "above"}
+            "below": "above", "on": "under", "under": "on"}
 
 
 def main():
@@ -43,10 +43,13 @@ def main():
     images = [decode_image((args.probe / item["image"]).read_bytes())[0] for item in items]
     tok = RustBPETokenizer.from_directory(str(args.resources / "tokenizer"))
     bos = tok.get_bos_token_id()
-    texts = [item["candidates"][r] for item in items for r in RELATIONS]
+    relations = list(items[0]["candidates"])  # the same candidate relations, in the same order, for every item
+    if any(list(item["candidates"]) != relations for item in items):
+        raise ValueError("every probe item needs the same candidate relations")
+    texts = [item["candidates"][r] for item in items for r in relations]
     ids = tok.encode(texts, num_threads=8)
     model, config, step, encoder, settings = load_model(args.checkpoint, device, args.encoder)
-    n, k = len(items), len(RELATIONS)
+    n, k = len(items), len(relations)
     with_image, _ = caption_losses(model, encoder, [(i // k, ids[i]) for i in range(n * k)], images,
                                    args.length, bos, device, args.batch)
     without, _ = caption_losses(model, encoder, [(None, ids[i]) for i in range(n * k)], images,
@@ -54,7 +57,7 @@ def main():
     with_image, without = with_image.reshape(n, k), without.reshape(n, k)
     groups = defaultdict(lambda: [0, 0, 0])  # acc4 hits, acc2 hits, count
     for i, item in enumerate(items):
-        true, opposite = RELATIONS.index(item["relation"]), RELATIONS.index(OPPOSITE[item["relation"]])
+        true, opposite = relations.index(item["relation"]), relations.index(OPPOSITE[item["relation"]])
         hit4 = int(np.argmax(without[i] - with_image[i]) == true)
         hit2 = int(with_image[i, true] < with_image[i, opposite])
         for key in ("all", item["axis"], f"{item['axis']}_d{item['distance']}"):
