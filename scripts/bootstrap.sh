@@ -9,7 +9,7 @@ if [ ! -x "$NTV_ROOT/bin/uv" ]; then
   curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="$NTV_ROOT/bin" UV_NO_MODIFY_PATH=1 sh
 fi
 UV="$NTV_ROOT/bin/uv"
-"$UV" sync --extra gpu
+"$UV" sync --extra gpu --inexact
 "$UV" pip install --no-deps --require-hashes -r third_party/NextTransformer/requirements/linear.txt
 .venv/bin/python - <<'PY'
 import torch, transformers, fla, nexttransformer
