@@ -35,7 +35,7 @@ class Track:
     rows: int = 128                    # 128 x 8192 = 1,048,576 tokens per update, as in NextTransformer
     total_tokens: int = 5_242_880_000  # pilot budget: 5,000 updates
     image_tokens: int = 144            # per image after the 2 x 2 merge
-    images_per_row: int = 14           # nominal audit layout: 2,016 of 8,192 positions (24.6%)
+    images_per_row: int = 12           # nominal audit layout: 1,728 of 8,192 positions (21.1%)
     visual_dim: int = VISUAL_DIM
 
     @property

@@ -14,8 +14,8 @@ Outputs (in --out):
   images.npz     image table: tar index, byte offset and size of each JPEG
   meta.json      inputs, counts and settings
 
-  python -m ntv.pack --tars <dir> --tar-range 0 27 --text <climbmix dir> --text-shards 0 7 \
-      --resources <resources> --rows 20000 --out <dir>
+  python -m ntv.pack --tar-root <data dir> --source cc12m/cc12m-train:0:991 --source cc3m/cc3m-train:0:591 \
+      --text <climbmix dir> --text-shards 0 71 --resources <resources> --rows 640000 --out <dir>
 """
 import argparse
 import bisect
@@ -160,22 +160,27 @@ def pack(images, captions, text, rows, per_row, sequence_len, bos, seed, out):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--tars", type=Path, required=True)
-    parser.add_argument("--tar-range", type=int, nargs=2, required=True, help="first and last shard, inclusive")
+    parser.add_argument("--tar-root", type=Path, required=True)
+    parser.add_argument("--source", action="append", required=True,
+                        help="<prefix>:<first>:<last>: tars <tar-root>/<prefix>-<first>..<last>.tar (inclusive)")
     parser.add_argument("--text", type=Path, required=True)
     parser.add_argument("--text-shards", type=int, nargs="+", required=True,
                         help="first and last ClimbMix shard (inclusive), or one shard number")
     parser.add_argument("--resources", type=Path, required=True)
     parser.add_argument("--rows", type=int, required=True)
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--per-row", type=int, default=14)
+    parser.add_argument("--per-row", type=int, default=12)
     parser.add_argument("--sequence-len", type=int, default=8192)
     parser.add_argument("--caption-max", type=int, default=64)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--workers", type=int, default=64)
     args = parser.parse_args()
 
-    tars = [args.tars / f"cc12m-train-{i:04d}.tar" for i in range(args.tar_range[0], args.tar_range[1] + 1)]
+    names = []
+    for source in args.source:
+        prefix, first, last = source.rsplit(":", 2)
+        names += [f"{prefix}-{i:04d}.tar" for i in range(int(first), int(last) + 1)]
+    tars = [args.tar_root / name for name in names]
     first, last = args.text_shards[0], args.text_shards[-1]
     shards = [args.text / f"shard_{i:05d}.parquet" for i in range(first, last + 1)]
     for path in [*tars, *shards]:
@@ -196,7 +201,7 @@ def main():
     text = TextDocuments(text_shards)
     pack(order, captions, text, args.rows, args.per_row, args.sequence_len, tok.get_bos_token_id(), args.seed, args.out)
     np.savez(args.out / "images.npz", tar=tar_id, offset=offsets, size=sizes)
-    meta = dict(tars=[p.name for p in tars], text_shards=[p.name for p in shards], rows=args.rows,
+    meta = dict(tars=names, text_shards=[p.name for p in shards], rows=args.rows,
                 per_row=args.per_row, sequence_len=args.sequence_len, image_tokens=IMAGE_TOKENS,
                 caption_max=args.caption_max, seed=args.seed, images_indexed=len(offsets),
                 images_with_captions=len(usable), images_used=args.rows * args.per_row,
