@@ -92,7 +92,9 @@ class TextDocuments:
         raise RuntimeError("text documents exhausted; add text shards")
 
     def take(self, capacity):
-        """The longest buffered document that fits, or a cropped one when none fits."""
+        """The longest buffered document that fits. When none fits, the first `capacity` tokens of the longest one;
+        its remainder (a continuation without BOS) goes back to the buffer, so no token is discarded and no long
+        document can stay in the buffer for ever."""
         while len(self.keys) < self.size:
             doc = self._next()
             if len(doc) < 2:
@@ -103,9 +105,15 @@ class TextDocuments:
             self.docs[key] = doc
         i = bisect.bisect_right(self.keys, (capacity, float("inf"))) - 1
         if i < 0:
-            key = self.keys.pop(0)
-            doc = self.docs.pop(key)[:capacity]
+            key = self.keys.pop()
+            whole = self.docs.pop(key)
+            doc, rest = whole[:capacity], whole[capacity:]
             self.cropped += 1
+            if len(rest) >= 2:
+                rest_key = (len(rest), self.serial)
+                self.serial += 1
+                bisect.insort(self.keys, rest_key)
+                self.docs[rest_key] = rest
         else:
             key = self.keys.pop(i)
             doc = self.docs.pop(key)

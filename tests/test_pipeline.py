@@ -201,3 +201,23 @@ def test_spatial_probe_runs_on_a_spatial_checkpoint(packed, tmp_path, monkeypatc
     assert result["images"] == 6 and result["conv2d"] == "k" and result["position"] == "rope2d"
     assert 0 <= result["all_acc4"] <= 1 and 0 <= result["all_acc2"] <= 1
     assert result["horizontal_count"] + result["vertical_count"] == 6
+
+
+def test_text_buffer_conserves_tokens_and_drains_long_documents():
+    rng = np.random.default_rng(5)
+    lengths = np.concatenate([rng.integers(2, 200, 3000), rng.integers(5000, 20000, 300)])
+    rng.shuffle(lengths)
+    tokens = rng.integers(3, 500, int(lengths.sum())).astype(np.uint16)
+    text = TextDocuments([(tokens, lengths)], size=100)
+    taken = 0
+    for _ in range(400):  # rows with a small text budget: long documents never fit whole
+        capacity = 300
+        while capacity > 0:
+            doc = text.take(capacity)
+            assert 0 < len(doc) <= capacity
+            capacity -= len(doc)
+            taken += len(doc)
+    buffered = sum(len(d) for d in text.docs.values())
+    consumed = int(lengths[:text.doc].sum())  # documents read so far (one shard)
+    assert taken + buffered == consumed == text.used_tokens + buffered
+    assert max(len(d) for d in text.docs.values()) < 20000  # long documents are being worked through
