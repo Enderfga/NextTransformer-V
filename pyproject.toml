@@ -7,6 +7,7 @@ name = "nexttransformer-v"
 version = "0.0.1"
 description = "A multimodal track for NextTransformer: backbone comparison with frozen vision-encoder tokens"
 requires-python = ">=3.10,<3.14"
+license = "MIT"
 dependencies = [
     "nexttransformer",
     "torch==2.9.1",

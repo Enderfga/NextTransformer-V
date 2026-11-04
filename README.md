@@ -140,3 +140,7 @@ The linear position probe of the visual tokens is `python -m ntv.position_probe`
 | `configs/` | calibrated backbones, the pilot job list |
 | `docs/` | pre-registration, addendum, RFC draft |
 | `results/` | summaries of every finished run (metrics and evaluation files) |
+
+## License
+
+MIT, like NextTransformer ([LICENSE](LICENSE)).
