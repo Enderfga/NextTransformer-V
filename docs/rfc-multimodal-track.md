@@ -1,6 +1,6 @@
 # RFC (draft, not filed): a multimodal track for NextTransformer
 
-Status: draft for discussion; results section to be completed from the pilot runs.
+Status: draft for discussion; the results section is updated as pilot runs finish.
 
 ## Summary
 
@@ -50,17 +50,60 @@ files. This RFC lists what the prototype had to work around, so the track could 
 2. No embedding hook: multimodal input needs a supported way to replace token embeddings (and value embeddings) at
    given positions.
 3. The ledger has no entries for `masked_scatter` / `masked_scatter_backward` / `index_select` (data movement) and
-   `index_add` (accumulation); the prototype subclasses `Ledger`.
+   `index_add` (accumulation); the prototype subclasses `Ledger`. A patch with these four rules and a test is in
+   `upstream/0001-ledger-data-movement-ops.patch`. It passes `tests/test_compute.py` and `checks.golden` (every method
+   is bitwise identical), but because `compute.py` is fingerprinted, it marks every published cost proof as stale until
+   a maintainer re-runs the full audit. A plugin-level way to register extra ledger rules would avoid that.
 4. `parameter_groups` validates the training configuration against the 50B protocol, so another budget cannot use it
    directly (the prototype passes the default configuration, whose learning rates and batch match).
 5. `audit_graph` builds its own model, so a wrapped model cannot be audited without re-implementing the audit loop.
 6. Preparation requires all 6,543 ClimbMix shards, while the tokenizer needs only the first 2B characters; a partial
    download reproduces the pinned tokenizer hash exactly.
 
-## Preliminary results
+## Preliminary results (pilot, 2026-11-04; updated as runs finish)
 
-To be completed: benchmark of the calibrated backbones at 8,192 tokens, the 2D-position study (pre-registered in
-`docs/spatial-preregistration.md`), throughput per method.
+All runs: 5,000 updates of 128 x 8,192 tokens (5.24B tokens), frozen SigLIP2, seed 42 unless stated, training FLOPs
+per token within 1% of the Dense anchor (`scripts/audit_variants.py`). Files: `results/`; tables: `results/tables.md`.
+
+**Backbones at 8,192 tokens.**
+
+| backbone | layers / FFN | parameters | caption BPB | text BPB (dev) | COCO caption BPB | seconds per update (8 x H200) |
+|---|---|---:|---:|---:|---:|---:|
+| Dense (anchor) | 23 / 6144 | 1.37B | 0.7728 | 0.7184 | 0.8472 | 2.90 |
+| GDN hybrid | 28 / 6016 | 1.65B | 0.7613 | 0.7152 | 0.8419 | 3.16 |
+| GDN, QSA hybrid, mHC | | | queued | | | |
+
+At matched compute, the GDN hybrid gets five more layers and lower loss on captions and text. It is about 9% slower
+per update with the current kernels.
+
+**2D position of image tokens** (pre-registered in `docs/spatial-preregistration.md`; secondary analyses in
+`docs/spatial-addendum.md`).
+
+- The pre-registered metric, vertical acc2 on the synthetic probe, is saturated at 99.9–100% for every run, so the
+  rule cannot call the 2D short convolution effective with SigLIP2 tokens. These tokens already carry their
+  position: ridge regression recovers a token's row and column with R^2 0.86 / 0.89, against 0.03 / 0.00 for raw
+  pixel patches.
+- Reordering the image tokens while keeping their content shows where each backbone reads position from. The table
+  gives acc2 on the harder probe after the token order is reversed along one axis: near 0 means position is read
+  from order, near 100% means from content.
+
+  | run | horizontal, columns reversed | vertical, rows reversed |
+  |---|---:|---:|
+  | Dense, RoPE-1D | 80.5% | 31.9% |
+  | Dense, NoPE | 82.0% | 51.7% |
+  | Hybrid, RoPE-1D | 27.7% | 58.3% |
+  | Hybrid, RoPE-2D | 36.9% | 61.2% |
+  | Hybrid, NoPE | 19.0% | 87.7% |
+  | Hybrid, NoPE + 2D conv | 19.5% | 28.6% |
+
+  The recurrence of the linear layers reads horizontal order. Without RoPE, the hybrid reads vertical position from
+  the encoder's features. With the 2D convolution, it reads vertical position from the token grid instead.
+- Accuracy is similar across runs. The harder probe gives 91–95% on both axes, COCO retrieval 98%, and What'sUp is
+  near chance at this scale. The 2D convolution costs 0.0025 caption BPB and no text BPB.
+- Pending:
+  - the seed spread (h-rope1d-s2, h-nope-conv2d-s2), which every difference above is to be compared with;
+  - the raw-patch replication, where position must come from the backbone;
+  - the RoPE-1D + 2D-convolution comparison.
 
 ## Open questions
 

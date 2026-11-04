@@ -1,0 +1,64 @@
+From cd163029792b8b2120562398eb88cf024a30906c Mon Sep 17 00:00:00 2001
+From: Enderfga <qq2639135175@gmail.com>
+Date: Wed, 4 Nov 2026 11:07:41 +0800
+Subject: [PATCH] Ledger: rules for masked_scatter, index_select and index_add
+
+---
+ nexttransformer/protocol/compute.py |  5 +++--
+ tests/test_compute.py               | 17 +++++++++++++++++
+ 2 files changed, 20 insertions(+), 2 deletions(-)
+
+diff --git a/nexttransformer/protocol/compute.py b/nexttransformer/protocol/compute.py
+index 5758ee4..9d3a1a3 100644
+--- a/nexttransformer/protocol/compute.py
++++ b/nexttransformer/protocol/compute.py
+@@ -69,7 +69,8 @@ class Ledger(TorchDispatchMode):
+     ZERO={"_to_copy","_unsafe_view","alias","arange","as_strided","as_strided_",
+           "cat","clone","constant_pad_nd","contiguous","copy_","detach","detach_",
+           "empty","empty_like","empty_strided","expand","fill_","flip","full","full_like",
+-          "gather","index","index_put","index_put_","lift_fresh","masked_fill","masked_fill_",
++          "gather","index","index_put","index_put_","index_select","lift_fresh","masked_fill","masked_fill_",
++          "masked_scatter","masked_scatter_backward",
+           "new_empty","new_empty_strided","new_zeros","ones","ones_like","permute","randn",
+           "randint","scalar_tensor","select","select_backward","slice","slice_backward",
+           "split","split_with_sizes","squeeze","stack","t","transpose","unbind","uniform_",
+@@ -137,7 +138,7 @@ class Ledger(TorchDispatchMode):
+         elif name=="linalg_vector_norm":cost=2*args[0].numel()+outs[0].numel()
+         elif name=="embedding":cost=0
+         elif name=="embedding_dense_backward":cost=args[0].numel()
+-        elif name in ("scatter_add","scatter_add_"):cost=args[3].numel()
++        elif name in ("scatter_add","scatter_add_","index_add","index_add_"):cost=args[3].numel()
+         elif name=="native_layer_norm":cost=7*args[0].numel()+5*outs[1].numel()
+         elif name=="native_layer_norm_backward":
+             # dX plus optional affine reductions; shared unit-op convention.
+diff --git a/tests/test_compute.py b/tests/test_compute.py
+index 94cf558..a659184 100644
+--- a/tests/test_compute.py
++++ b/tests/test_compute.py
+@@ -120,6 +120,23 @@ def test_cumsum_and_triangular_solve_rules():
+     assert solves==[4*5*6*(6-1)+5*6*(6-1)+5*6]
+ 
+ 
++def test_data_movement_and_index_add_rules():
++    # Replacing embeddings at masked positions or gathering rows moves data (zero, like index_put);
++    # the backward of index_select accumulates one addition per source element (like scatter_add).
++    ledger=Ledger()
++    with FakeTensorMode(),ledger:
++        x=torch.empty(6,4,requires_grad=True);src=torch.empty(3,4,requires_grad=True)
++        mask=torch.zeros(6,1,dtype=torch.bool).expand(6,4)
++        y=x.masked_scatter(mask,src)
++        rows=torch.zeros(5,dtype=torch.long)
++        z=y.index_select(0,rows)
++        ledger.phase="backward";z.sum().backward()
++    ops=ledger.report()["operators"]
++    assert not ledger.unknown
++    assert not any("masked_scatter" in name or "index_select." in name for name in ops)
++    assert sum(v["theory"] for name,v in ops.items() if "index_add" in name)==5*4
++
++
+ @pytest.mark.parametrize("kind",["elu_linear","elu_norm","elu_qknorm"])
+ def test_elu_chunk_forward_matches_closed_form(kind):
+     """Hand count of the registered chunk numerator plus the FP32 normalizer (elu_linear only)."""
+-- 
+2.50.1 (Apple Git-155)
+
