@@ -19,6 +19,15 @@ SEED_PAIRS = (("h-rope1d", "h-rope1d-s2"), ("h-nope-conv2d", "h-nope-conv2d-s2")
 DECISIONS = (("NoPE", "h-nope-conv2d", "h-nope"), ("RoPE-1D", "h-rope1d-conv2d", "h-rope1d"),
              ("NoPE, raw patches", "r-h-nope-conv2d", "r-h-nope"))
 REQUIRED = ("d-rope1d", "d-nope", "h-rope1d", "h-nope", "h-rope2d", "h-nope-conv2d")
+# Secondary, descriptive (docs/spatial-addendum.md): differences on the harder probe, against the seed spread measured
+# on that probe with the same two seed pairs.
+HARD_KEYS = (("vertical_acc2", "垂直"), ("horizontal_acc2", "水平"), ("vflip_vertical_acc2", "垂直翻转后的垂直"),
+             ("hflip_horizontal_acc2", "水平翻转后的水平"))
+CONTRASTS = tuple((f"二维卷积 · {mode}", treated, base) for mode, treated, base in DECISIONS) + (
+    ("RoPE-2D 对 RoPE-1D（混合）", "h-rope2d", "h-rope1d"), ("NoPE 对 RoPE-1D（混合）", "h-nope", "h-rope1d"),
+    ("NoPE 对 RoPE-1D（Dense）", "d-nope", "d-rope1d"), ("混合对 Dense（RoPE-1D）", "h-rope1d", "d-rope1d"),
+    ("混合对 Dense（NoPE）", "h-nope", "d-nope"), ("Hilbert 对逐行顺序（混合 · NoPE）", "h-nope-hilbert", "h-nope"),
+    ("二维卷积 · RoPE-2D", "h-rope2d-conv2d", "h-rope2d"))
 LABELS = {"d-rope1d": "Dense · RoPE-1D", "d-nope": "Dense · NoPE", "h-rope1d": "Hybrid · RoPE-1D",
           "h-rope1d-s2": "Hybrid · RoPE-1D (seed 43)", "h-nope": "Hybrid · NoPE", "h-rope2d": "Hybrid · RoPE-2D",
           "h-nope-conv2d": "Hybrid · NoPE + 2D conv", "h-nope-conv2d-s2": "Hybrid · NoPE + 2D conv (seed 43)",
@@ -82,6 +91,45 @@ def decide(runs):
         out.append(row)
     return dict(seed_spread=spread, seed_spreads=spreads, decisions=out,
                 required_complete=all(r in runs and runs[r]["complete"] for r in REQUIRED))
+
+
+def secondary(runs):
+    """Descriptive only: differences between runs on the harder probe and the seed spread on that probe."""
+    spread = {}
+    for key, _ in HARD_KEYS:
+        diffs = [abs(final(runs[a], key, "hard") - final(runs[b], key, "hard")) for a, b in SEED_PAIRS
+                 if final(runs.get(a), key, "hard") is not None and final(runs.get(b), key, "hard") is not None]
+        spread[key] = max(diffs) if len(diffs) == len(SEED_PAIRS) else None
+    rows = []
+    for label, treated, base in CONTRASTS:
+        diff = {}
+        for key, _ in HARD_KEYS:
+            a, b = final(runs.get(treated), key, "hard"), final(runs.get(base), key, "hard")
+            diff[key] = None if a is None or b is None else a - b
+        rows.append(dict(label=label, treated=treated, baseline=base, diff=diff))
+    return dict(hard_seed_spread=spread, hard_contrasts=rows)
+
+
+def contrast_table(sec):
+    """Hard-probe differences in percentage points; bold where larger than twice the seed spread."""
+    spread = sec["hard_seed_spread"]
+    rows = []
+    for row in sec["hard_contrasts"]:
+        if all(v is None for v in row["diff"].values()):
+            continue
+        cells = []
+        for key, _ in HARD_KEYS:
+            v, s = row["diff"][key], spread[key]
+            text = "–" if v is None else f"{100 * v:+.1f}"
+            beyond = v is not None and s is not None and abs(v) > NOISE * s
+            cells.append(f"<td><b>{text}</b></td>" if beyond else f"<td>{text}</td>")
+        rows.append(f"<tr><td>{escape(row['label'])}</td>" + "".join(cells) + "</tr>")
+    if not rows:
+        return "<p>等待结果</p>"
+    noise = "".join(f"<td>{'–' if spread[k] is None else f'{100 * NOISE * spread[k]:.1f}'}</td>" for k, _ in HARD_KEYS)
+    head = "".join(f"<th>{escape(name)}</th>" for _, name in HARD_KEYS)
+    return (f'<div class="wide"><table><tr><th>对比（前者减后者，百分点）</th>{head}</tr>{"".join(rows)}'
+            f'<tr><td>2× 种子间波动</td>{noise}</tr></table></div>')
 
 
 def pct(value):
@@ -195,7 +243,7 @@ document.querySelectorAll('[data-tip]').forEach(el=>{
 """
 
 
-def render(runs, decision, position=None):
+def render(runs, decision, position=None, sec=None):
     order = [n for n in LABELS if n in runs] + sorted(n for n in runs if n not in LABELS)
     tiles = []
     for d in decision["decisions"]:
@@ -261,6 +309,10 @@ def render(runs, decision, position=None):
 0% = 判断被完全反转，全靠 token 顺序；100% = 不受影响，全靠 token 内容（如编码器的位置编码）；50% = 两者各半或读不出。
 难版探针，最终 checkpoint。</p>
 {legend}{dumbbell(runs, order, keys=flip_keys, source="hard", low=0., note="")}
+<h2>难版探针上的差异，和种子间波动比较</h2>
+<p>每格是两个 run 在难版探针最终 checkpoint 上的差（百分点）。种子间波动取两对换种子 run 在同一指标上差值的较大者；
+超过 2 倍波动的格子加粗。只作描述，不参与判定。</p>
+{contrast_table(sec or secondary(runs))}
 <h2>学习曲线</h2><div class="smalls">{curves(runs, key, "vertical_acc2", "垂直关系 acc2（合成探针）")}
 {curves(runs, key, "horizontal_acc2", "水平关系 acc2（合成探针）")}
 {curves(runs, key, "vertical_acc2", "垂直关系 acc2（难版探针）", "hard")}
@@ -280,9 +332,10 @@ def main():
     runs = {d.name: load_run(d) for d in sorted(args.results.iterdir()) if (d / "metrics.jsonl").exists()}
     decision = decide(runs)
     position = {p.stem: json.loads(p.read_text()) for p in (args.results / "position-probe").glob("*.json")}
-    args.out.write_text(render(runs, decision, position))
+    sec = secondary(runs)
+    args.out.write_text(render(runs, decision, position, sec))
     if args.json:
-        args.json.write_text(json.dumps(decision, indent=2) + "\n")
+        args.json.write_text(json.dumps(dict(decision, secondary=sec), indent=2) + "\n")
     print(json.dumps(decision, indent=2))
 
 

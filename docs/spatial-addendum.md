@@ -39,3 +39,16 @@ tuned on results.
 
 All of these analyses are descriptive. Differences between runs on the harder probe are compared with the seed
 spread measured on that probe (the same two seed pairs), not with the spread of the primary metric.
+
+The report lists these harder-probe contrasts, fixed on 2026-11-04 before either seed pair had finished:
+
+- the three pre-registered pairs (2D convolution against the same position mode);
+- RoPE-2D against RoPE-1D, and NoPE against RoPE-1D, in the hybrid;
+- NoPE against RoPE-1D in Dense;
+- hybrid against Dense, with RoPE-1D and with NoPE;
+- Hilbert against raster order (hybrid, NoPE);
+- 2D convolution with RoPE-2D.
+
+Each contrast is reported on four metrics: vertical acc2, horizontal acc2, vertical acc2 after the row flip, and
+horizontal acc2 after the column flip. The seed spread of a metric is the larger difference between the two seed
+pairs on that metric. A difference is marked when it exceeds twice that spread.

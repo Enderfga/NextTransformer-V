@@ -53,3 +53,25 @@ def test_secondary_analyses_render_without_entering_the_decision(tmp_path):
     position = {"siglip": dict(row_r2=.86, col_r2=.89, row_acc=.36, col_acc=.4, chance_acc=1 / 12, test_images=256)}
     html = render(runs, decision, position)
     assert "R² 0.86 / 0.89" in html and "难版探针" in html and "垂直: 60.0%" in html
+
+
+def test_hard_probe_contrasts_against_the_hard_seed_spread(tmp_path):
+    hard = {"h-rope1d": .90, "h-rope1d-s2": .91, "h-nope-conv2d": .95, "h-nope-conv2d-s2": .93, "h-nope": .92,
+            "h-rope2d": .905}
+    for name, value in hard.items():
+        d = write(tmp_path, name, .999)
+        (d / "hard_checkpoint_00005000.json").write_text(json.dumps(dict(
+            step=5000, vertical_acc2=value, horizontal_acc2=.9, vflip_vertical_acc2=.6, hflip_horizontal_acc2=.3)))
+    from ntv.analysis import secondary
+    runs = {d.name: load_run(d) for d in tmp_path.iterdir()}
+    sec = secondary(runs)
+    assert abs(sec["hard_seed_spread"]["vertical_acc2"] - .02) < 1e-9
+    rows = {r["treated"]: r["diff"] for r in sec["hard_contrasts"]}
+    assert abs(rows["h-nope-conv2d"]["vertical_acc2"] - .03) < 1e-9 and rows["h-rope1d-conv2d"]["vertical_acc2"] is None
+    html = render(runs, decide(runs), None, sec)
+    assert "<td>+3.0</td>" in html          # 3 points is within twice the spread (4 points): not bold
+    assert "<td>4.0</td>" in html           # the 2x spread row
+    (tmp_path / "h-nope" / "hard_checkpoint_00005000.json").write_text(json.dumps(dict(
+        step=5000, vertical_acc2=.85, horizontal_acc2=.9, vflip_vertical_acc2=.6, hflip_horizontal_acc2=.3)))
+    runs = {d.name: load_run(d) for d in tmp_path.iterdir()}
+    assert "<td><b>+10.0</b></td>" in render(runs, decide(runs))   # 10 points > twice the 2-point spread
