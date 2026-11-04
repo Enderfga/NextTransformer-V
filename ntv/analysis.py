@@ -51,6 +51,15 @@ def load_run(directory):
     for path in directory.glob("hard_checkpoint_*.json"):
         data = json.loads(path.read_text())
         run["hard"][data["step"]] = data
+    run["sizes"] = {}  # image side -> harder-probe result of the final checkpoint at that resolution
+    for path in directory.glob("hard[0-9]*_checkpoint_00005000.json"):
+        data = json.loads(path.read_text())
+        run["sizes"][data["image_size"]] = data
+    run["mechanism"] = None
+    for path in directory.glob("mechanism_checkpoint_00005000.json"):
+        data = json.loads(path.read_text())
+        if data["layer_probe"] and "order_row_r2" in data["layer_probe"][0]:  # skip the first, confounded design
+            run["mechanism"] = data
     for path in directory.glob("coco_*.json"):
         run["coco"] = json.loads(path.read_text())
     for path in directory.glob("whatsup_*.json"):
@@ -108,6 +117,37 @@ def secondary(runs):
             diff[key] = None if a is None or b is None else a - b
         rows.append(dict(label=label, treated=treated, baseline=base, diff=diff))
     return dict(hard_seed_spread=spread, hard_contrasts=rows)
+
+
+SIZES = (384, 576, 768)
+
+
+def at_size(run, key, size):
+    """Harder-probe `key` of the final checkpoint at an image side of `size` px (384 is the training resolution)."""
+    if not run or not run["complete"]:
+        return None
+    if size == 384:
+        return final(run, key, "hard")
+    return run["sizes"].get(size, {}).get(key)
+
+
+def resolution(runs):
+    """Descriptive: change of harder-probe accuracy from 384 px to larger images, and its seed spread."""
+    keys = ("vertical_acc2", "horizontal_acc2")
+    drops = {}
+    for name in runs:
+        for key in keys:
+            for size in SIZES[1:]:
+                a, b = at_size(runs[name], key, size), at_size(runs[name], key, 384)
+                if a is not None and b is not None:
+                    drops[(name, key, size)] = a - b
+    spread = {}
+    for key in keys:
+        for size in SIZES[1:]:
+            diffs = [abs(drops[(a, key, size)] - drops[(b, key, size)]) for a, b in SEED_PAIRS
+                     if (a, key, size) in drops and (b, key, size) in drops]
+            spread[(key, size)] = max(diffs) if len(diffs) == len(SEED_PAIRS) else None
+    return drops, spread
 
 
 def contrast_table(sec):
@@ -384,6 +424,45 @@ def figure(svg, title, subtitle, keys, width=760):
             f'{inner}</g></g></svg>\n')
 
 
+def line_panels(panels, xs, xlabels, low, high, ytick, percent=True, width=330, height=230):
+    """Side-by-side line charts with a shared y range. panels: [(caption, [(label, [y or None per x])])], up to four
+    series per panel in categorical slot order; series end labels keep at least one line apart."""
+    left, top, gap, label = 46, 30, 150, 12
+    pw = width
+    total = len(panels) * (left + pw) + (len(panels) - 1) * (gap - left) + gap
+    x0, x1 = min(xs), max(xs)
+    parts = [f'<svg viewBox="0 0 {total} {height}" role="img">']
+    for k, (caption, series) in enumerate(panels):
+        ox = k * (pw + gap)
+        X = lambda v: ox + left + (v - x0) / (x1 - x0) * pw
+        Y = lambda v: top + (1 - (min(max(v, low), high) - low) / (high - low)) * (height - top - 30)
+        parts.append(f'<text class="row" x="{ox + left}" y="{label}" font-weight="600">{escape(caption)}</text>')
+        tick = low
+        while tick <= high + 1e-9:
+            text = f"{round(100 * tick)}%" if percent else f"{tick:.1f}"
+            parts.append(f'<line class="grid" x1="{ox + left}" x2="{ox + left + pw}" y1="{Y(tick):.1f}" y2="{Y(tick):.1f}"/>'
+                         f'<text class="tick" x="{ox + left - 6}" y="{Y(tick) + 4:.1f}" text-anchor="end">{text}</text>')
+            tick += ytick
+        for x, name in zip(xs, xlabels):
+            parts.append(f'<text class="tick" x="{X(x):.1f}" y="{height - 8}" text-anchor="middle">{escape(name)}</text>')
+        ends = []
+        for slot, (name, ys) in enumerate(series, 1):
+            points = [(x, y) for x, y in zip(xs, ys) if y is not None]
+            if not points:
+                continue
+            path = " ".join(f"{'M' if i == 0 else 'L'}{X(x):.1f},{Y(y):.1f}" for i, (x, y) in enumerate(points))
+            parts.append(f'<path class="line c{slot}" d="{path}"/>')
+            if len(points) <= 8:
+                parts += [f'<circle class="dot c{slot}" cx="{X(x):.1f}" cy="{Y(y):.1f}" r="4"/>' for x, y in points]
+            ends.append([Y(points[-1][1]) + 4, X(points[-1][0]) + 8, name])
+        ends.sort()
+        for i in range(1, len(ends)):
+            ends[i][0] = max(ends[i][0], ends[i - 1][0] + 13)
+        parts += [f'<text class="end" x="{tx:.1f}" y="{ty:.1f}">{escape(n)}</text>' for ty, tx, n in ends]
+    parts.append("</svg>")
+    return "".join(parts)
+
+
 def write_figures(runs, directory):
     """English SVG figures for the README, from the same data as the report."""
     directory.mkdir(parents=True, exist_ok=True)
@@ -408,6 +487,34 @@ def write_figures(runs, directory):
             [(f"c{i}", LABELS[n]) for i, n in enumerate(
                 [n for n in ["h-rope1d", "h-nope", "h-rope2d", "h-nope-conv2d"] if n in runs and runs[n]["hard"]], 1)]),
     }
+    key4 = [n for n in ("d-rope1d", "h-rope1d", "h-nope", "h-nope-conv2d") if n in runs]
+    short = {"d-rope1d": "Dense RoPE-1D", "h-rope1d": "Hybrid RoPE-1D", "h-nope": "Hybrid NoPE",
+             "h-nope-conv2d": "Hybrid NoPE + conv", "r-h-nope": "Hybrid NoPE", "r-h-nope-conv2d": "Hybrid NoPE + conv",
+             "r-h-rope1d": "Hybrid RoPE-1D", "r-d-rope1d": "Dense RoPE-1D"}
+    if any(runs[n]["sizes"] for n in key4):
+        panels = [(axis, [(short[n], [at_size(runs[n], key, s) for s in SIZES]) for n in key4])
+                  for axis, key in (("vertical relations", "vertical_acc2"), ("horizontal relations", "horizontal_acc2"))]
+        out["resolution.svg"] = figure(
+            line_panels(panels, [12, 18, 24], ["12 x 12", "18 x 18", "24 x 24"], .5, 1., .1),
+            "Zero-shot resolution transfer (SigLIP2 tokens, harder probe)",
+            ["Trained at 12 x 12 tokens per image (384 px). The same images at 576 and 768 px give 18 x 18 and",
+             "24 x 24 tokens, so vertical neighbours sit 18 or 24 tokens apart instead of 12. acc2; chance is 50%."],
+            [(f"c{i}", LABELS[n]) for i, n in enumerate(key4, 1)])
+    probed = [n for n in key4 if runs[n].get("mechanism")]
+    if probed:
+        depth = max(len(runs[n]["mechanism"]["layer_probe"]) for n in probed)
+        series = lambda key: [(short[n], [row[key] for row in runs[n]["mechanism"]["layer_probe"]] +
+                               [None] * (depth - len(runs[n]["mechanism"]["layer_probe"]))) for n in probed]
+        xs = list(range(depth))
+        labels = [str(x) if x % 7 == 0 else "" for x in xs]
+        out["layer-probe.svg"] = figure(
+            line_panels([("row from token order", series("order_row_r2")),
+                         ("row from token content", series("content_row_r2"))], xs, labels, 0., 1., .2,
+                        percent=False),
+            "Where each layer gets the row of an image token (COCO, R² of a linear probe)",
+            ["Layer 0 is the input after the visual projector. Probes are fitted on images fed in a random token order,",
+             "so a token's slot in the sequence and its cell in the image are independent. Columns from order stay near 0."],
+            [(f"c{i}", LABELS[n]) for i, n in enumerate(probed, 1)])
     if any(final(runs[n], "vflip_vertical_acc2", "hard") is not None for n in raw):
         out["token-order-raw.svg"] = figure(dumbbell(runs, raw, keys=flip_keys, source="hard", low=0., note=""),
                                             "Where the backbone reads 2D position from (raw pixel patches)",
@@ -477,6 +584,42 @@ def markdown(runs, decision, sec, position=None):
         out.append(f"| {row['treated']} | {row['baseline']} | " + " | ".join(cells) + " |")
     out.append("| 2x seed spread | | " + " | ".join("pending" if hs[k] is None else f"{100 * NOISE * hs[k]:.1f}"
                                                    for k, _ in HARD_KEYS) + " |")
+    drops, spread = resolution(runs)
+    rows = [n for n in order if any((n, "vertical_acc2", s) in drops for s in SIZES[1:])]
+    if rows:
+        out += ["", "### Zero-shot resolution transfer (harder probe, final checkpoint, no retraining)", "",
+                "The same probe images at 384 px (12 x 12 tokens, the training resolution), 576 px (18 x 18) and 768 px "
+                "(24 x 24). Accuracies in %; change in points from 384 px.", "",
+                "| run | V 384 | V 576 | V 768 | V change at 768 | H 384 | H 576 | H 768 | H change at 768 "
+                "| V 768, rows reversed |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+        for n in rows:
+            r = runs[n]
+            cells = [p(at_size(r, "vertical_acc2", s)) for s in SIZES]
+            dv = drops.get((n, "vertical_acc2", 768))
+            cells.append("–" if dv is None else f"{100 * dv:+.1f}")
+            cells += [p(at_size(r, "horizontal_acc2", s)) for s in SIZES]
+            dh = drops.get((n, "horizontal_acc2", 768))
+            cells.append("–" if dh is None else f"{100 * dh:+.1f}")
+            cells.append(p(at_size(r, "vflip_vertical_acc2", 768)))
+            out.append(f"| {n} | " + " | ".join(cells) + " |")
+        sv, sh = spread[("vertical_acc2", 768)], spread[("horizontal_acc2", 768)]
+        out += ["", "Seed spread of the change at 768 px (larger of the two seed pairs): vertical "
+                f"{'pending' if sv is None else f'{100 * sv:.1f}'} points, horizontal "
+                f"{'pending' if sh is None else f'{100 * sh:.1f}'} points."]
+    probed = [n for n in order if runs[n].get("mechanism")]
+    if probed:
+        out += ["", "### Layer probe (COCO images, R² of ridge regression from the residual stream)", "",
+                "`order`: the row (column) of the slot a token sits in, `content`: the row (column) of the cell it came "
+                "from, both fitted on images fed in a random token order. Input = after the visual projector; middle and "
+                "last = after the middle and the last block.", "",
+                "| run | input content row / col | middle: order row / col | middle: content row / col "
+                "| last: order row / col | last: content row / col |", "|---|---:|---:|---:|---:|---:|"]
+        for n in probed:
+            layers = runs[n]["mechanism"]["layer_probe"]
+            first, mid, last = layers[0], layers[len(layers) // 2], layers[-1]
+            f2 = lambda r, a: f"{r[a + '_row_r2']:.2f} / {r[a + '_col_r2']:.2f}"
+            out.append(f"| {n} | {f2(first, 'content')} | {f2(mid, 'order')} | {f2(mid, 'content')} "
+                       f"| {f2(last, 'order')} | {f2(last, 'content')} |")
     if position:
         out += ["", "### Position carried by the visual tokens (ridge regression, before any backbone)", "",
                 "| visual input | row R^2 | column R^2 | row accuracy | column accuracy | chance |",
