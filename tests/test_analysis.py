@@ -84,3 +84,14 @@ def test_conclusion_is_rendered_at_the_top(tmp_path):
     assert "<p>First <b>finding</b>.</p>" in html and "<li>two &lt;x&gt;</li>" in html
     assert html.index("结论") < html.index("预注册判定")
     assert "<h2>结论</h2>" not in render(runs, decide(runs))
+
+
+def test_markdown_tables(tmp_path):
+    from ntv.analysis import markdown, secondary
+    for name in ("h-nope", "h-nope-conv2d"):
+        write(tmp_path, name, .99)
+    runs = {d.name: load_run(d) for d in tmp_path.iterdir()}
+    text = markdown(runs, decide(runs), secondary(runs), {"siglip": dict(row_r2=.86, col_r2=.89, row_acc=.36,
+                                                                         col_acc=.4, chance_acc=1 / 12)})
+    assert "| NoPE | h-nope-conv2d | h-nope | +0.0 |" in text and "pending" in text
+    assert "| siglip | 0.86 | 0.89 | 36% | 40% | 8% |" in text

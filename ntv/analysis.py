@@ -343,12 +343,82 @@ left/right 算水平）；COCO 检索为 5 选 1（随机 20%）。</p>
 </main><div id="tip" role="tooltip"></div><script>{SCRIPT}</script></body></html>"""
 
 
+def setting(run):
+    """Backbone, position mode, 2D convolution and visual input of a run, from its start event."""
+    start = next((e for e in run["events"] if e["event"] == "start"), {})
+    s = start.get("settings", {})
+    return dict(method=s.get("method", "?"), position=s.get("position", "rope1d"), conv2d=s.get("conv2d", "none"),
+                visual=s.get("visual", "siglip"), order=s.get("order", "raster"), seed=s.get("seed", 42))
+
+
+def markdown(runs, decision, sec, position=None):
+    """The result tables in Markdown, generated from the same files as the report."""
+    order = [n for n in LABELS if n in runs] + sorted(n for n in runs if n not in LABELS)
+    p = lambda v: "–" if v is None else f"{100 * v:.1f}"
+    out = ["### Pre-registered decision (primary metric: synthetic-probe vertical acc2, final checkpoint)", "",
+           "| 2D convolution, position mode | treated | baseline | gain (points) | caption BPB change "
+           "| text BPB change | verdict |", "|---|---|---|---:|---:|---:|---|"]
+    for d in decision["decisions"]:
+        gain = f"{100 * d['gain']:+.1f}" if "gain" in d else "–"
+        cap = f"{d['caption_bpb_delta']:+.4f}" if "gain" in d else "–"
+        txt = f"{d['text_bpb_delta']:+.4f}" if "gain" in d else "–"
+        out.append(f"| {d['mode']} | {d['treated']} | {d['baseline']} | {gain} | {cap} | {txt} | {d['verdict']} |")
+    spread = decision["seed_spread"]
+    out += ["", f"Seed spread of the primary metric: {'pending' if spread is None else f'{100 * spread:.1f} points'} "
+            f"(larger of the two seed pairs).", "",
+            "### All runs (final checkpoint)", "",
+            "Accuracies in %. `col flip` / `row flip`: horizontal accuracy with the columns of each token row reversed, "
+            "vertical accuracy with the token rows reversed (harder probe).", "",
+            "| run | method | position | 2D conv | visual | seed | caption BPB | text BPB | synth H | synth V "
+            "| hard H | hard V | hard H, col flip | hard V, row flip | What'sUp H | What'sUp V | COCO BPB "
+            "| COCO retrieval | s/update |",
+            "|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    for n in order:
+        r, s = runs[n], setting(runs[n])
+        f, w, c = r["final"] or {}, r["whatsup"] or {}, r["coco"] or {}
+        cells = [n, s["method"], s["position"], s["conv2d"], s["visual"], s["seed"], num(f.get("caption_bpb")),
+                 num(f.get("text_bpb")), p(final(r, "horizontal_acc2")), p(final(r, "vertical_acc2")),
+                 p(final(r, "horizontal_acc2", "hard")), p(final(r, "vertical_acc2", "hard")),
+                 p(final(r, "hflip_horizontal_acc2", "hard")), p(final(r, "vflip_vertical_acc2", "hard")),
+                 p(w.get("horizontal_acc2")), p(w.get("vertical_acc2")), num(c.get("caption_bpb")),
+                 p(c.get("retrieval_pmi")), num(r["seconds"], 2)]
+        out.append("| " + " | ".join(str(x) for x in cells) + " |")
+    names = [name for _, name in HARD_KEYS]
+    english = {"vertical_acc2": "V", "horizontal_acc2": "H", "vflip_vertical_acc2": "V, row flip",
+               "hflip_horizontal_acc2": "H, col flip"}
+    hs = sec["hard_seed_spread"]
+    out += ["", "### Harder-probe contrasts (descriptive)", "",
+            "Differences in points, treated minus baseline. **Bold**: larger than twice the seed spread on that metric.",
+            "", "| treated | baseline | " + " | ".join(english[k] for k, _ in HARD_KEYS) + " |",
+            "|---|---|" + "---:|" * len(names)]
+    for row in sec["hard_contrasts"]:
+        if all(v is None for v in row["diff"].values()):
+            continue
+        cells = []
+        for key, _ in HARD_KEYS:
+            v, s_ = row["diff"][key], hs[key]
+            text = "–" if v is None else f"{100 * v:+.1f}"
+            cells.append(f"**{text}**" if v is not None and s_ is not None and abs(v) > NOISE * s_ else text)
+        out.append(f"| {row['treated']} | {row['baseline']} | " + " | ".join(cells) + " |")
+    out.append("| 2x seed spread | | " + " | ".join("pending" if hs[k] is None else f"{100 * NOISE * hs[k]:.1f}"
+                                                   for k, _ in HARD_KEYS) + " |")
+    if position:
+        out += ["", "### Position carried by the visual tokens (ridge regression, before any backbone)", "",
+                "| visual input | row R^2 | column R^2 | row accuracy | column accuracy | chance |",
+                "|---|---:|---:|---:|---:|---:|"]
+        for kind, q in sorted(position.items()):
+            out.append(f"| {kind} | {q['row_r2']:.2f} | {q['col_r2']:.2f} | {100 * q['row_acc']:.0f}% "
+                       f"| {100 * q['col_acc']:.0f}% | {100 * q['chance_acc']:.0f}% |")
+    return "\n".join(out) + "\n"
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("results", type=Path)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--json", type=Path)
     parser.add_argument("--conclusion", type=Path, help="Markdown text shown at the top of the report")
+    parser.add_argument("--markdown", type=Path, help="also write the result tables in Markdown")
     args = parser.parse_args()
     runs = {d.name: load_run(d) for d in sorted(args.results.iterdir()) if (d / "metrics.jsonl").exists()}
     decision = decide(runs)
@@ -356,6 +426,8 @@ def main():
     sec = secondary(runs)
     conclusion = args.conclusion.read_text() if args.conclusion else None
     args.out.write_text(render(runs, decision, position, sec, conclusion))
+    if args.markdown:
+        args.markdown.write_text(markdown(runs, decision, sec, position))
     if args.json:
         args.json.write_text(json.dumps(dict(decision, secondary=sec), indent=2) + "\n")
     print(json.dumps(decision, indent=2))
