@@ -2,11 +2,12 @@
 
 Two descriptive analyses of a checkpoint (docs/spatial-addendum.md), on COCO images in rows `[BOS] [image] caption`:
 
-- Layer probe. Ridge regression from the residual stream to each image token's row and column, at the input (after
-  the visual projector) and after every block. It is fitted on some images and scored (R^2) on others. The test
-  images are scored again with the token rows reversed (`vflip`) and with the columns of each row reversed (`hflip`).
-  A layer that encodes position by token order predicts the row (or column) of the slot a token sits in; one that
-  encodes it by token content predicts the row the token came from. R^2 is reported against both.
+- Layer probe. Ridge regression from the residual stream to each image token's position, at the input (after the
+  visual projector) and after every block, fitted on some images and scored (R^2) on others. In the training order a
+  token's place in the sequence and its place in the image coincide, so a probe could use either. The images are
+  therefore also fed with their tokens in a random order (one fixed permutation per image), where the two are
+  independent, and two probes are fitted there: one for the slot a token sits in (position from token order) and one
+  for the cell it came from (position from token content).
 - GDN retention. For every GDN layer and head, the forget gate alpha at image and at caption positions, as the
   fraction of the state that survives one token, one image row (12 tokens) and one image (144 tokens). With the
   delta rule the state can also be overwritten, so these are upper bounds on what a layer can carry that far.
@@ -84,25 +85,27 @@ def fit(fit_set, val_set, test_sets):
     return dict(lam=best, **{name: r2(m, w, c) for name, m in test_sets.items()})
 
 
-def flip_targets(mode, grid=GRID):
-    """For each slot of an image fed with `mode`: (slot row, slot col, content row, content col)."""
-    from ntv.spatial_eval import scramble_index
-    index = torch.arange(grid * grid) if mode is None else scramble_index(mode, grid)
+def permutation(image, grid=GRID):
+    """The fixed random token order of one image in the decorrelated probe."""
+    return torch.randperm(grid * grid, generator=torch.Generator().manual_seed(10_000 + image))
+
+
+def targets(index, grid=GRID):
+    """For an image fed in token order `index` (slot s holds cell index[s]): (slot row, slot col, cell row, cell col)."""
     slot = torch.arange(grid * grid)
     return torch.stack([slot // grid, slot % grid, index // grid, index % grid], 1).double()
 
 
 @torch.no_grad()
-def collect(model, encoder, images, captions, bos, device, decays, test_from, batch=16, grid=GRID):
-    """Yield (order, {layer: (B * grid^2, width) states at image positions}, image indices) per batch.
+def collect(model, encoder, images, captions, bos, device, decays, batch=16, grid=GRID):
+    """Yield (order, {layer: (B * grid^2, width) states at image positions}, targets, image indices) per batch.
 
-    Layer 0 is the input (token embeddings with the projected image features), layer i the output of block i.
-    Images from `test_from` on are also fed reordered (vflip, hflip). `decays` collects the GDN log forget gates
-    (per head) at image and caption positions of the unchanged rows.
+    Layer 0 is the input (token embeddings with the projected image features), layer i the output of block i. Every
+    batch is fed in raster order and again with each image's tokens in its own random order ("permuted").
+    `decays` collects the GDN log forget gates (per head) at image and caption positions of the raster rows.
     """
     from ntv.evaluate import rows
     from ntv.model import visual_inputs
-    from ntv.spatial_eval import scramble_index
     states, current, hooks = {}, {}, []
     hooks.append(model.transformer.wte.register_forward_hook(lambda m, a, out: states.__setitem__(0, out)))
     for i, block in enumerate(model.transformer.h, 1):
@@ -120,19 +123,16 @@ def collect(model, encoder, images, captions, bos, device, decays, test_from, ba
             caption = torch.zeros_like(mask)
             caption[:, 1:] = (y[:, :-1] >= 0).to(device)  # positions holding caption tokens
             pixels = torch.from_numpy(np.stack([images[s] for s in chunk])).to(device)
-            features = encoder(pixels)
-            orders = (None, "vflip", "hflip") if first >= test_from else (None,)
-            for order in orders:
-                if order is None:
-                    fed = features
-                else:
-                    index = scramble_index(order, grid).to(device)
-                    fed = features.view(len(chunk), grid * grid, -1)[:, index].reshape(features.shape)
+            features = encoder(pixels).view(len(chunk), grid * grid, -1)
+            for order in ("raster", "permuted"):
+                index = [torch.arange(grid * grid) if order == "raster" else permutation(s, grid) for s in chunk]
+                fed = torch.stack([features[k, i.to(device)] for k, i in enumerate(index)]).reshape(-1, features.shape[-1])
                 with visual_inputs(model, mask, fed, grid=grid):
                     model(x)
                 width = states[0].shape[-1]
-                yield order, {k: v[mask].reshape(-1, width).float() for k, v in states.items()}, chunk
-                if order is None:
+                y = torch.cat([targets(i, grid) for i in index]).to(device)
+                yield order, {k: v[mask].reshape(-1, width).float() for k, v in states.items()}, y, chunk
+                if order == "raster":
                     for i, log_alpha in current.items():  # (B, T, heads)
                         d = decays.setdefault(i, dict(image=[], caption=[]))
                         d["image"].append(log_alpha[mask].cpu())
@@ -153,30 +153,27 @@ def columns(m, cols):
 
 
 def analyse(model, encoder, images, captions, bos, device, train, val, batch=16, grid=GRID):
-    """Layer probe and GDN retention; images [0, val) choose the penalty, [val, train) fit, [train, n) test."""
+    """Layer probes and GDN retention; images [0, val) choose the penalty, [val, train) fit, [train, n) test."""
     moments, decays = {}, {}
-    targets = {order: flip_targets(order, grid).to(device) for order in (None, "vflip", "hflip")}
-    for order, layers, chunk in collect(model, encoder, images, captions, bos, device, decays, train, batch, grid):
-        part = "val" if chunk[0] < val else "fit" if chunk[0] < train else "test"
+    for order, layers, y, chunk in collect(model, encoder, images, captions, bos, device, decays, batch, grid):
         if (chunk[0] < val) != (chunk[-1] < val) or (chunk[0] < train) != (chunk[-1] < train):
             raise ValueError("--val and --train must be multiples of --batch")
-        y = targets[order].repeat(len(chunk), 1)
-        key = part if order is None else f"test_{order}"
+        part = "val" if chunk[0] < val else "fit" if chunk[0] < train else "test"
         for layer, x in layers.items():
-            if (layer, key) not in moments:
-                moments[(layer, key)] = Moments(x.shape[-1], 4, device)
-            moments[(layer, key)].add(x, y)
-    slot, content = [0, 1], [2, 3]  # target columns: (slot row, slot col, content row, content col)
+            if (layer, order, part) not in moments:
+                moments[(layer, order, part)] = Moments(x.shape[-1], 4, device)
+            moments[(layer, order, part)].add(x, y)
+    slot, cell = [0, 1], [2, 3]  # target columns: (slot row, slot col, cell row, cell col)
     probe = []
-    for layer in sorted({layer for layer, _ in moments}):
-        m = {key: moments[(layer, key)] for key in ("fit", "val", "test", "test_vflip", "test_hflip")}
-        result = fit(columns(m["fit"], content), columns(m["val"], content),
-                     {"test": columns(m["test"], content),
-                      "vflip_content": columns(m["test_vflip"], content), "vflip_slot": columns(m["test_vflip"], slot),
-                      "hflip_content": columns(m["test_hflip"], content), "hflip_slot": columns(m["test_hflip"], slot)})
-        probe.append(dict(layer=layer, lam=result["lam"], row_r2=result["test"][0], col_r2=result["test"][1],
-                          vflip_row_r2_content=result["vflip_content"][0], vflip_row_r2_slot=result["vflip_slot"][0],
-                          hflip_col_r2_content=result["hflip_content"][1], hflip_col_r2_slot=result["hflip_slot"][1]))
+    for layer in sorted({key[0] for key in moments}):
+        def probe_on(order, cols):
+            m = {part: columns(moments[(layer, order, part)], cols) for part in ("fit", "val", "test")}
+            return fit(m["fit"], m["val"], {"test": m["test"]})
+        raster, by_order, by_content = probe_on("raster", cell), probe_on("permuted", slot), probe_on("permuted", cell)
+        probe.append(dict(layer=layer, row_r2=raster["test"][0], col_r2=raster["test"][1],
+                          order_row_r2=by_order["test"][0], order_col_r2=by_order["test"][1],
+                          content_row_r2=by_content["test"][0], content_col_r2=by_content["test"][1],
+                          lam=[raster["lam"], by_order["lam"], by_content["lam"]]))
     retention = []
     for layer, d in sorted(decays.items()):
         row = dict(layer=layer)
@@ -217,12 +214,12 @@ def main():
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2) + "\n")
     for row in result["layer_probe"]:
-        print(f"layer {row['layer']:2d}  row {row['row_r2']:.2f} col {row['col_r2']:.2f}  "
-              f"vflip row: content {row['vflip_row_r2_content']:.2f} slot {row['vflip_row_r2_slot']:.2f}  "
-              f"hflip col: content {row['hflip_col_r2_content']:.2f} slot {row['hflip_col_r2_slot']:.2f}")
+        print(f"layer {row['layer']:2d}  raster row {row['row_r2']:.2f} col {row['col_r2']:.2f}  "
+              f"from order: row {row['order_row_r2']:.2f} col {row['order_col_r2']:.2f}  "
+              f"from content: row {row['content_row_r2']:.2f} col {row['content_col_r2']:.2f}")
     for row in result["gdn_retention"]:
-        print(f"GDN block {row['layer']:2d}  image row retention (median head) "
-              f"{float(np.median(row['image_row'])):.3f}  caption {float(np.median(row['caption_row'])):.3f}")
+        print(f"GDN block {row['layer']:2d}  retention (median head) image: row {np.median(row['image_row']):.3f} "
+              f"image {np.median(row['image_image']):.3f}  caption: row {np.median(row['caption_row']):.3f}")
 
 
 if __name__ == "__main__":

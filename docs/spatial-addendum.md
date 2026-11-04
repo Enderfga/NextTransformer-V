@@ -52,3 +52,22 @@ The report lists these harder-probe contrasts, fixed on 2026-11-04 before either
 Each contrast is reported on four metrics: vertical acc2, horizontal acc2, vertical acc2 after the row flip, and
 horizontal acc2 after the column flip. The seed spread of a metric is the larger difference between the two seed
 pairs on that metric. A difference is marked when it exceeds twice that spread.
+
+## Second addendum: resolution transfer and mechanism (2026-11-04)
+
+These three analyses were added after the SigLIP2 results were in. They are exploratory, run on existing final
+checkpoints without new training, and do not enter the decision.
+
+6. **Zero-shot resolution transfer.** The harder probe, with the same images resized to 576 px and 768 px, so each
+   image becomes 18 x 18 or 24 x 24 tokens instead of 12 x 12. Vertical neighbours are then 18 or 24 tokens apart in
+   the sequence instead of 12. SigLIP2 interpolates its position embedding at the new size. Raw patches stay
+   32 x 32 pixels. Run with `python -m ntv.spatial_eval --size 576` (or 768). At 384 px the code reproduces the
+   archived probe results exactly, on all 222 values of a checkpoint.
+7. **Layer probe.** Ridge regression from the residual stream to each image token's row and column, at the input and
+   after every block, on COCO images. Fitted on 640 images, penalty chosen on 128, scored on 256. In the training order
+   a token's place in the sequence and its place in the image coincide, so the images are also fed with their tokens in
+   a fixed random order per image. There, separate probes are fitted for the slot a token sits in (position from
+   order) and for the cell it came from (position from content). `python -m ntv.mechanism`.
+8. **GDN retention.** For every GDN layer and head, the median forget gate at image and at caption positions, given
+   as the fraction of the state that survives one token, one image row (12 tokens) and one image (144 tokens). Because
+   the delta rule can also overwrite the state, these are upper bounds on what a layer can carry that far.

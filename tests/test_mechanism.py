@@ -57,9 +57,9 @@ def test_layer_probe_separates_order_from_content_and_reads_gdn_gates():
     result = analyse(model, PositionEncoder(), images, captions, bos=1, device="cpu", train=32, val=16, batch=16)
     first = result["layer_probe"][0]  # the input: projected tokens, which carry the position embedding
     assert first["layer"] == 0 and first["row_r2"] > .9 and first["col_r2"] > .9
-    # Reordering moves the content (and its position embedding) with the token: the input encodes content position.
-    assert first["vflip_row_r2_content"] > .9 > first["vflip_row_r2_slot"]
-    assert first["hflip_col_r2_content"] > .9 > first["hflip_col_r2_slot"]
+    # The input knows where a token came from (content), not where it sits in the sequence (order).
+    assert first["content_row_r2"] > .9 and first["content_col_r2"] > .9
+    assert first["order_row_r2"] < .1 and first["order_col_r2"] < .1
     assert [row["layer"] for row in result["layer_probe"]] == list(range(len(model.transformer.h) + 1))
     gdn = [i + 1 for i, block in enumerate(model.transformer.h) if hasattr(block.attn, "decay_proj")]
     assert [row["layer"] for row in result["gdn_retention"]] == gdn and gdn
