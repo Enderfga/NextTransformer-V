@@ -1,12 +1,15 @@
 {
-  "seed_spread": null,
-  "seed_spreads": [],
+  "seed_spread": 0.0009794319294809117,
+  "seed_spreads": [
+    0.0009794319294809117,
+    0.0009794319294809117
+  ],
   "decisions": [
     {
       "mode": "NoPE",
       "treated": "h-nope-conv2d",
       "baseline": "h-nope",
-      "verdict": "pending",
+      "verdict": "negative",
       "gain": 0.0009794319294809117,
       "caption_bpb_delta": 0.0024631529299073973,
       "text_bpb_delta": 6.513941845032178e-05
@@ -27,10 +30,10 @@
   "required_complete": true,
   "secondary": {
     "hard_seed_spread": {
-      "vertical_acc2": null,
-      "horizontal_acc2": null,
-      "vflip_vertical_acc2": null,
-      "hflip_horizontal_acc2": null
+      "vertical_acc2": 0.028684470820969366,
+      "horizontal_acc2": 0.02628918099089983,
+      "vflip_vertical_acc2": 0.0771513353115727,
+      "hflip_horizontal_acc2": 0.03134479271991908
     },
     "hard_contrasts": [
       {
