@@ -1,6 +1,6 @@
 # RFC (draft, not filed): a multimodal track for NextTransformer
 
-Status: draft for discussion; the results section is updated as pilot runs finish.
+Status: draft for discussion; the pilot ended on 2026-11-04.
 
 ## Summary
 
@@ -60,7 +60,7 @@ files. This RFC lists what the prototype had to work around, so the track could 
 6. Preparation requires all 6,543 ClimbMix shards, while the tokenizer needs only the first 2B characters; a partial
    download reproduces the pinned tokenizer hash exactly.
 
-## Preliminary results (pilot, 2026-11-04; updated as runs finish)
+## Preliminary results (pilot, 2026-11-04)
 
 All runs: 5,000 updates of 128 x 8,192 tokens (5.24B tokens), frozen SigLIP2, seed 42 unless stated, training FLOPs
 per token within 1% of the Dense anchor (`scripts/audit_variants.py`). Files: `results/`; tables: `results/tables.md`.
@@ -71,7 +71,7 @@ per token within 1% of the Dense anchor (`scripts/audit_variants.py`). Files: `r
 |---|---|---:|---:|---:|---:|---:|
 | Dense (anchor) | 23 / 6144 | 1.37B | 0.7728 | 0.7184 | 0.8472 | 2.90 |
 | GDN hybrid | 28 / 6016 | 1.65B | 0.7613 | 0.7152 | 0.8419 | 3.16 |
-| GDN, QSA hybrid, mHC | | | queued | | | |
+| GDN, QSA hybrid, mHC | | | not run in the pilot | | | |
 
 At matched compute, the GDN hybrid gets five more layers and lower loss on captions and text. It is about 9% slower
 per update with the current kernels.

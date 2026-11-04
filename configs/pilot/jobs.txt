@@ -1,6 +1,8 @@
 # The pilot runs of the 2D-position study, in the order they were planned. "<run> <method> [ntv.train arguments]".
 # Every run: 5,000 updates of 128 rows x 8,192 tokens, seed 42 unless stated, compute matched to the Dense anchor.
 # Pre-registration: docs/spatial-preregistration.md; secondary analyses: docs/spatial-addendum.md.
+# The pilot ended on 2026-11-04 after r-h-nope-conv2d. The runs after it in this list were not run
+# (r-h-rope1d and r-h-rope2d were stopped part-way and are not reported).
 
 # Diagnostic grid (frozen SigLIP2 tokens, raster patch order)
 d-rope1d dense_full

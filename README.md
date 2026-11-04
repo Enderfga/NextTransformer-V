@@ -46,10 +46,9 @@ linear mixing 2D-aware helps. The study was pre-registered.
 - <img src="https://img.shields.io/badge/NEW-E5607E?style=flat-square" alt="New" height="18"> **2026-11-04** · First
   study: the 2D position of image tokens in hybrid backbones. It has eleven compute-matched runs, two seed pairs, a
   raw-pixel replication and a pre-registered decision.
-- <img src="https://img.shields.io/badge/RUNNING-8B5CF6?style=flat-square" alt="Running" height="18"> **2026-11-04** ·
-  More raw-pixel runs (RoPE-1D, RoPE-2D, Dense).
-- <img src="https://img.shields.io/badge/QUEUED-7A8194?style=flat-square" alt="Queued" height="18"> **2026-11-05** ·
-  Backbone benchmark at 8,192 tokens (GDN, QSA hybrid, mHC).
+- <img src="https://img.shields.io/badge/DONE-7A8194?style=flat-square" alt="Done" height="18"> **2026-11-04** · The
+  pilot is complete. The further raw-pixel runs and the backbone benchmark listed in `configs/pilot/jobs.txt` were not
+  run.
 
 ## Highlights
 

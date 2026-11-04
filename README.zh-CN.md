@@ -40,8 +40,7 @@
   - 换到训练时没见过的分辨率，依赖 RoPE-1D 读位置的模型掉 13–20 个百分点，二维卷积保持住准确率；
   - 原始像素输入下（编码器不提供位置），正是二维卷积让混合骨干分得清左右（51% → 99%）。
 - <img src="https://img.shields.io/badge/NEW-E5607E?style=flat-square" alt="New" height="18"> **2026-11-04** · 第一项研究：混合骨干里图像 token 的二维位置。包含 11 个算力对齐的 run、两对换种子的 run、一组原始像素复现，以及预注册的判定。
-- <img src="https://img.shields.io/badge/RUNNING-8B5CF6?style=flat-square" alt="Running" height="18"> **2026-11-04** · 更多原始像素 run（RoPE-1D、RoPE-2D、Dense）。
-- <img src="https://img.shields.io/badge/QUEUED-7A8194?style=flat-square" alt="Queued" height="18"> **2026-11-05** · 8,192 上下文下的骨干对比（GDN、QSA 混合、mHC）。
+- <img src="https://img.shields.io/badge/DONE-7A8194?style=flat-square" alt="Done" height="18"> **2026-11-04** · pilot 已完成。`configs/pilot/jobs.txt` 里列出的其余原始像素 run 和骨干对比没有运行。
 
 ## 亮点
 
