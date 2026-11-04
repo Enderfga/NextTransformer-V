@@ -46,9 +46,19 @@ Image tokens are frozen SigLIP2 features (so400m/16 at 384 px, merged 2 x 2 into
   The GDN recurrence supplies horizontal position from token order. In the hybrid without RoPE, vertical position
   comes from the encoder's features. The 2D convolution makes the hybrid read vertical position from the token grid
   instead.
-- **None of this changes accuracy or loss at this scale.** On the harder probe, all runs score 91–95% on both axes. The
+
+  ![Where each backbone reads position from](docs/figures/token-order.svg)
+
+  With the 2D convolution, vertical position is read from the token grid from the first checkpoint on. Without
+  it, the NoPE hybrid relies more and more on the encoder's features as training goes on:
+
+  ![Vertical accuracy with the token rows reversed, during training](docs/figures/token-order-curves.svg)
+
+- **Accuracy and loss barely differ at this scale.** On the harder probe, all runs score 91–95% on both axes. The
   run with the 2D convolution is 3.2 points lower on vertical acc2; whether that exceeds seed noise is pending. COCO
   caption BPB (0.84–0.86), COCO 5-way retrieval (98%) and What'sUp (about 50%, near chance) barely separate the runs.
+
+  ![Relation accuracy on the harder probe](docs/figures/accuracy.svg)
 
 Still running: the two seed pairs, which set the noise level for every comparison above, and the raw-pixel runs. Raw
 32 px patches carry no position embedding, so they test the 2D mechanisms when the encoder does not supply position.
@@ -64,7 +74,7 @@ Still running: the two seed pairs, which set the noise level for every compariso
 - Compute: NextTransformer's operator ledger audits the multimodal model. Every backbone is calibrated to within 1% of
   the Dense anchor at 8,192 tokens (5.9956 GFLOPs per token) with the v2 grid rule
   ([`configs/track`](configs/track)). [`scripts/audit_variants.py`](scripts/audit_variants.py) checks every pilot
-  variant against the anchor.
+  variant against the anchor; the largest deviation is 0.29% ([`results/compute-audit.txt`](results/compute-audit.txt)).
 - Evaluation:
   - caption and text BPB;
   - COCO 5k caption BPB and retrieval by likelihood;
@@ -109,7 +119,8 @@ bash scripts/pilot.sh configs/pilot/jobs.txt
 
 # Report, pre-registered decision and tables
 python scripts/export_results.py $NTV_ROOT/runs results    # summaries without site paths
-python -m ntv.analysis results --out report.html --json results/decision.json --markdown results/tables.md
+python -m ntv.analysis results --out report.html --json results/decision.json --markdown results/tables.md \
+    --figures docs/figures
 ```
 
 Calibration is already in [`configs/track`](configs/track). To redo it:

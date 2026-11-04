@@ -343,6 +343,78 @@ left/right 算水平）；COCO 检索为 5 选 1（随机 20%）。</p>
 </main><div id="tip" role="tooltip"></div><script>{SCRIPT}</script></body></html>"""
 
 
+FIGURE_STYLE = (
+    "<style>text{font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif}"
+    ".grid{stroke:#e6e5e1;stroke-width:1}.tick,.row,.end,.key{fill:#52514e;font-size:12px}"
+    ".title{fill:#0b0b0b;font-size:14px;font-weight:600}.sub{fill:#52514e;font-size:12px}"
+    ".link{stroke:#7a7975;stroke-width:2;stroke-linecap:round}.dot{stroke:#fcfcfb;stroke-width:2}"
+    ".s1,.c1{fill:#2a78d6}.s2,.c2{fill:#eb6834}.c3{fill:#1baf7a}.c4{fill:#eda100}"
+    ".line{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}path.c1{stroke:#2a78d6}"
+    "path.c2{stroke:#eb6834}path.c3{stroke:#1baf7a}path.c4{stroke:#eda100}</style>")
+
+
+def figure(svg, title, subtitle, keys, width=760):
+    """A standalone figure from one of the report's SVG charts: title, subtitle lines and legend on top, no tooltips.
+    The chart is scaled to `width`; the legend wraps onto more lines when needed."""
+    import re
+    svg = re.sub(r'<circle class="hit"[^>]*/>', "", re.search(r"<svg.*?</svg>", svg, re.S).group(0))
+    svg = re.sub(r' data-tip="[^"]*"', "", svg)
+    w, h = (float(v) for v in re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', svg).groups())
+    inner = svg[svg.index(">") + 1:svg.rindex("</svg>")]
+    lines = [subtitle] if isinstance(subtitle, str) else list(subtitle)
+    parts = [f'<text class="title" x="12" y="20">{escape(title)}</text>']
+    y = 20
+    for line in lines:
+        y += 18
+        parts.append(f'<text class="sub" x="12" y="{y}">{escape(line)}</text>')
+    x, y = 12, y + 22
+    for slot, label in keys:
+        size = 30 + 7 * len(label)
+        if x > 12 and x + size > width - 12:
+            x, y = 12, y + 20
+        parts.append(f'<circle class="dot {slot}" cx="{x + 5}" cy="{y - 4}" r="5"/>'
+                     f'<text class="key" x="{x + 15}" y="{y}">{escape(label)}</text>')
+        x += size
+    head, scale = y + 14, width / w
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {head + h * scale:.0f}" role="img" '
+            f'aria-label="{escape(title)}">{FIGURE_STYLE}<rect width="100%" height="100%" fill="#fcfcfb"/>'
+            f'{"".join(parts)}<g transform="translate(0,{head}) scale({scale:.4f})">{inner}</g></svg>\n')
+
+
+def write_figures(runs, directory):
+    """English SVG figures for the README, from the same data as the report."""
+    directory.mkdir(parents=True, exist_ok=True)
+    order = [n for n in LABELS if n in runs] + sorted(n for n in runs if n not in LABELS)
+    siglip = [n for n in order if not n.startswith("r-")]
+    raw = [n for n in order if n.startswith("r-")]
+    axes = (("s1", "horizontal relation"), ("s2", "vertical relation"))
+    flips = (("s1", "horizontal, columns of each token row reversed"), ("s2", "vertical, token rows reversed"))
+    flip_keys = ("hflip_horizontal_acc2", "vflip_vertical_acc2")
+    out = {
+        "token-order.svg": figure(dumbbell(runs, siglip, keys=flip_keys, source="hard", low=0., note=""),
+                                  "Where the backbone reads 2D position from (SigLIP2 tokens)",
+                                  ["Harder probe, final checkpoint. The image tokens are reordered; their content is unchanged.",
+                                   "Near 0%: position read from token order. Near 100%: read from token content."], flips),
+        "accuracy.svg": figure(dumbbell(runs, siglip, source="hard"),
+                               "Relation accuracy on the harder probe (SigLIP2 tokens)",
+                               "acc2: true relation against its opposite, final checkpoint; chance is 50%.", axes),
+        "token-order-curves.svg": figure(
+            curves(runs, ["h-rope1d", "h-nope", "h-rope2d", "h-nope-conv2d"], "vflip_vertical_acc2", "", "hard"),
+            "Vertical accuracy with the token rows reversed, during training",
+            "Harder probe; lower = vertical position read from token order.",
+            [(f"c{i}", LABELS[n]) for i, n in enumerate(
+                [n for n in ["h-rope1d", "h-nope", "h-rope2d", "h-nope-conv2d"] if n in runs and runs[n]["hard"]], 1)]),
+    }
+    if any(final(runs[n], "vflip_vertical_acc2", "hard") is not None for n in raw):
+        out["token-order-raw.svg"] = figure(dumbbell(runs, raw, keys=flip_keys, source="hard", low=0., note=""),
+                                            "Where the backbone reads 2D position from (raw pixel patches)",
+                                            "Harder probe, final checkpoint; raw patches carry no position embedding.",
+                                            flips)
+    for name, svg in out.items():
+        (directory / name).write_text(svg)
+    return sorted(out)
+
+
 def setting(run):
     """Backbone, position mode, 2D convolution and visual input of a run, from its start event."""
     start = next((e for e in run["events"] if e["event"] == "start"), {})
@@ -419,6 +491,7 @@ def main():
     parser.add_argument("--json", type=Path)
     parser.add_argument("--conclusion", type=Path, help="Markdown text shown at the top of the report")
     parser.add_argument("--markdown", type=Path, help="also write the result tables in Markdown")
+    parser.add_argument("--figures", type=Path, help="also write English SVG figures into this directory")
     args = parser.parse_args()
     runs = {d.name: load_run(d) for d in sorted(args.results.iterdir()) if (d / "metrics.jsonl").exists()}
     decision = decide(runs)
@@ -426,6 +499,8 @@ def main():
     sec = secondary(runs)
     conclusion = args.conclusion.read_text() if args.conclusion else None
     args.out.write_text(render(runs, decision, position, sec, conclusion))
+    if args.figures:
+        write_figures(runs, args.figures)
     if args.markdown:
         args.markdown.write_text(markdown(runs, decision, sec, position))
     if args.json:

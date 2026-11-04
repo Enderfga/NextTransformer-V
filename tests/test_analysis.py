@@ -95,3 +95,20 @@ def test_markdown_tables(tmp_path):
                                                                          col_acc=.4, chance_acc=1 / 12)})
     assert "| NoPE | h-nope-conv2d | h-nope | +0.0 |" in text and "pending" in text
     assert "| siglip | 0.86 | 0.89 | 36% | 40% | 8% |" in text
+
+
+def test_english_figures(tmp_path):
+    import re
+    from ntv.analysis import write_figures
+    for name in ("h-rope1d", "h-nope-conv2d"):
+        d = write(tmp_path / "runs", name, .999)
+        for step in (1000, 5000):
+            (d / f"hard_checkpoint_{step:08d}.json").write_text(json.dumps(dict(
+                step=step, vertical_acc2=.9, horizontal_acc2=.88, vflip_vertical_acc2=.3, hflip_horizontal_acc2=.2)))
+    runs = {d.name: load_run(d) for d in (tmp_path / "runs").iterdir()}
+    names = write_figures(runs, tmp_path / "fig")
+    assert names == ["accuracy.svg", "token-order-curves.svg", "token-order.svg"]
+    for name in names:
+        svg = (tmp_path / "fig" / name).read_text()
+        assert svg.startswith("<svg xmlns") and "data-tip" not in svg
+        assert not re.search(r"[一-鿿]", svg)

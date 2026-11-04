@@ -1,0 +1,18 @@
+anchor 5.9956 GFLOPs/token
+dense_full  siglip {}                                            5.9956 +0.000%
+dense_full  siglip {"position": "nope"}                          5.9956 +0.000%
+dense_full  raw32  {}                                            5.9936 -0.034%
+dense_full  raw32  {"position": "nope"}                          5.9936 -0.034%
+gdn_hybrid  siglip {}                                            5.9804 -0.254%
+gdn_hybrid  siglip {"position": "nope"}                          5.9804 -0.254%
+gdn_hybrid  siglip {"position": "rope2d"}                        5.9804 -0.254%
+gdn_hybrid  siglip {"position": "nope", "conv2d": "k"}           5.9809 -0.245%
+gdn_hybrid  siglip {"conv2d": "k"}                               5.9809 -0.245%
+gdn_hybrid  siglip {"position": "rope2d", "conv2d": "k"}         5.9809 -0.245%
+gdn_hybrid  siglip {"position": "nope", "order": "hilbert"}      5.9804 -0.254%
+gdn_hybrid  raw32  {"position": "nope"}                          5.9784 -0.288%
+gdn_hybrid  raw32  {"position": "nope", "conv2d": "k"}           5.9788 -0.280%
+gdn_hybrid  raw32  {}                                            5.9784 -0.288%
+gdn_hybrid  raw32  {"position": "rope2d"}                        5.9784 -0.288%
+gdn_hybrid  raw32  {"conv2d": "k"}                               5.9788 -0.280%
+largest deviation 0.288%
