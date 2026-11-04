@@ -8,14 +8,15 @@ Its first study asks where a hybrid backbone (Gated DeltaNet layers with a few a
 image tokens, and whether making its linear mixing 2D-aware helps. It was pre-registered before the runs started
 ([pre-registration](docs/spatial-preregistration.md), [addendum](docs/spatial-addendum.md)).
 
-**Status (2026-11-04).** The diagnostic grid has finished. The seed pairs and the raw-pixel replication are still
-running. Every number below comes from the files in [`results/`](results/), and the tables are generated from them
-([`results/tables.md`](results/tables.md)).
+**Status (2026-11-04).** Finished: the diagnostic grid, both seed pairs and the two pre-registered 2D-convolution
+comparisons with SigLIP2 tokens. Running: the raw-pixel replication and more raw-pixel runs. This page is updated as
+they finish. Every number below comes from the files in [`results/`](results/), and the tables are generated from
+them ([`results/tables.md`](results/tables.md)).
 
 ## The 2D-position study
 
-The six diagnostic runs share the same budget: about 1.4–1.6B parameters, 5,000 updates of 128 rows x 8,192 tokens
-(5.24B tokens), 12 images per row, and training FLOPs per token within 1% of the Dense anchor. They differ in three
+Every run has the same budget: 5,000 updates of 128 rows x 8,192 tokens (5.24B tokens), 12 images per row, and
+training FLOPs per token within 1% of the Dense anchor. Models have 1.4–1.6B parameters. The runs differ in three
 things:
 
 - **Backbone:** Dense, or the GDN hybrid, where three of every four layers are GDN.
@@ -24,44 +25,69 @@ things:
   1D short convolution of the linear layers at image positions.
 
 Image tokens are frozen SigLIP2 features (so400m/16 at 384 px, merged 2 x 2 into 12 x 12 tokens) fed in raster order.
+Two configurations were repeated with a second seed to measure noise.
 
-### Findings so far
+### Findings with SigLIP2 tokens
 
-- **The pre-registered metric is saturated.** All six runs reach 99.9–100% vertical acc2 on the synthetic
-  spatial-relation probe. The training mix contains images with the same layout, and SigLIP2 tokens carry their
-  position (a linear probe recovers a token's row and column with R^2 0.86 / 0.89). A 5-point gain is therefore
-  impossible, and the pre-registered rule can only call the 2D convolution ineffective in this setting.
-- **Each backbone reads position from a different source.** The runs are scored again on a harder probe, with
-  the image tokens reordered while their content is unchanged. Reversing the columns of each token row inverts the
-  horizontal answers of a backbone that reads horizontal position from token order. Reversing the token rows does the
-  same for vertical position.
+**1. The pre-registered rule finds the 2D convolution ineffective in both position modes.**
 
-  | run | horizontal, columns reversed | vertical, rows reversed |
-  |---|---:|---:|
-  | Dense, RoPE-1D | 80.5% (content) | 31.9% (order) |
-  | Hybrid, RoPE-1D | 27.7% (order) | 58.3% (both) |
-  | Hybrid, NoPE | 19.0% (order) | 87.7% (content) |
-  | Hybrid, NoPE + 2D conv | 19.5% (order) | 28.6% (order, through the convolution) |
+| 2D convolution against | vertical acc2 gain | caption BPB change | text BPB change | verdict |
+|---|---:|---:|---:|---|
+| the NoPE hybrid | +0.1 points | +0.0025 | +0.0001 | not effective |
+| the RoPE-1D hybrid | +0.1 points | +0.0022 | -0.0002 | not effective |
 
-  The GDN recurrence supplies horizontal position from token order. In the hybrid without RoPE, vertical position
-  comes from the encoder's features. The 2D convolution makes the hybrid read vertical position from the token grid
-  instead.
+The rule needed a gain of at least 5 points, above twice the seed spread, which is 0.1 points. It could not be met,
+because the primary metric is saturated: every run reaches 99.9–100% vertical acc2 on the synthetic probe. There are
+two reasons. The training mix contains images with the probe's layout, and SigLIP2 tokens carry their own position:
+ridge regression recovers a token's row and column with R^2 0.86 / 0.89, against 0.03 / 0.00 for raw pixel patches.
 
-  ![Where each backbone reads position from](docs/figures/token-order.svg)
+**2. The backbones read position from different sources, and the 2D convolution changes the source.** The runs are
+scored again on a harder probe (finer grid, smaller objects, more distractors) with the image tokens reordered, their
+content unchanged. Reversing the columns of each token row inverts the horizontal answers of a backbone that reads
+horizontal position from token order. Reversing the token rows does the same for vertical position. Near 0% means
+position is read from token order; near 100%, from token content.
 
-  With the 2D convolution, vertical position is read from the token grid from the first checkpoint on. Without
-  it, the NoPE hybrid relies more and more on the encoder's features as training goes on:
+| run | horizontal, columns reversed | vertical, rows reversed |
+|---|---:|---:|
+| Dense, RoPE-1D | 80.5% | 31.9% |
+| Dense, NoPE | 82.0% | 51.7% |
+| Hybrid, RoPE-1D (seeds 42 / 43) | 27.7% / 30.8% | 58.3% / 65.5% |
+| Hybrid, RoPE-2D | 36.9% | 61.2% |
+| Hybrid, NoPE | 19.0% | 87.7% |
+| Hybrid, NoPE + 2D conv (seeds 42 / 43) | 19.5% / 22.1% | 28.6% / 20.9% |
+| Hybrid, RoPE-1D + 2D conv | 20.0% | 21.0% |
 
-  ![Vertical accuracy with the token rows reversed, during training](docs/figures/token-order-curves.svg)
+Measured with the two seed pairs, the seed spread is 3.1 points for the first column and 7.7 for the second. The
+differences below are all larger than twice that:
 
-- **Accuracy and loss barely differ at this scale.** On the harder probe, all runs score 91–95% on both axes. The
-  run with the 2D convolution is 3.2 points lower on vertical acc2; whether that exceeds seed noise is pending. COCO
-  caption BPB (0.84–0.86), COCO 5-way retrieval (98%) and What'sUp (about 50%, near chance) barely separate the runs.
+- The GDN recurrence reads horizontal position from token order. The hybrids stay at 19–37% when the columns are
+  reversed; Dense stays at 80–82%.
+- The NoPE hybrid reads vertical position from the encoder's features, at 87.7% with the rows reversed.
+- The 2D convolution moves vertical position to the token grid in both position modes. With the rows reversed,
+  vertical accuracy falls 37 points with RoPE-1D and 59 points with NoPE.
 
-  ![Relation accuracy on the harder probe](docs/figures/accuracy.svg)
+RoPE-2D, by contrast, does not change where the hybrid reads vertical position from. With the rows reversed it
+scores 61.2%, against 58.3% for RoPE-1D, a gap within the seed spread.
 
-Still running: the two seed pairs, which set the noise level for every comparison above, and the raw-pixel runs. Raw
-32 px patches carry no position embedding, so they test the 2D mechanisms when the encoder does not supply position.
+![Where each backbone reads position from](docs/figures/token-order.svg)
+
+With the 2D convolution, vertical position is read from the token grid from the first checkpoint on. Without it, the
+NoPE hybrid relies more and more on the encoder's features as training goes on:
+
+![Vertical accuracy with the token rows reversed, during training](docs/figures/token-order-curves.svg)
+
+**3. Accuracy and loss do not change beyond seed noise.**
+- On the harder probe, every run scores 88–96% on both axes. No contrast exceeds twice the seed spread, which is 2.9
+  points vertically and 2.6 points horizontally.
+- COCO caption BPB is 0.84–0.86 and COCO 5-way retrieval 98% for every run, so they barely separate the runs.
+- What'sUp stays at about 50%, near chance, at this scale.
+
+![Relation accuracy on the harder probe](docs/figures/accuracy.svg)
+
+In short: with a position-aware encoder, the 2D mechanisms change how the backbone reads position, not how well.
+
+**Running:** raw 32 px patches, which carry no position embedding. They test the 2D mechanisms when the encoder does
+not supply position.
 
 ## Design of the track
 

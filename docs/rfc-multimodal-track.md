@@ -77,33 +77,36 @@ At matched compute, the GDN hybrid gets five more layers and lower loss on capti
 per update with the current kernels.
 
 **2D position of image tokens** (pre-registered in `docs/spatial-preregistration.md`; secondary analyses in
-`docs/spatial-addendum.md`).
+`docs/spatial-addendum.md`; the README has the full summary).
 
-- The pre-registered metric, vertical acc2 on the synthetic probe, is saturated at 99.9–100% for every run, so the
-  rule cannot call the 2D short convolution effective with SigLIP2 tokens. These tokens already carry their
+- **Pre-registered decision.** The 2D short convolution is not effective in either position mode. The vertical acc2
+  gain is +0.1 points with NoPE and with RoPE-1D. Caption BPB changes by +0.0025 and +0.0022, text BPB by +0.0001 and
+  -0.0002, and the seed spread is 0.1 points. The primary metric is saturated at 99.9–100%. SigLIP2 tokens carry their
   position: ridge regression recovers a token's row and column with R^2 0.86 / 0.89, against 0.03 / 0.00 for raw
   pixel patches.
-- Reordering the image tokens while keeping their content shows where each backbone reads position from. The table
-  gives acc2 on the harder probe after the token order is reversed along one axis: near 0 means position is read
-  from order, near 100% means from content.
+- **Mechanism.** Reordering the image tokens while keeping their content shows where each backbone reads position
+  from. The table gives acc2 on the harder probe after the token order is reversed along one axis: near 0 means
+  position is read from token order, near 100% from content. The seed spread, measured with two seed pairs, is 3.1
+  points for the horizontal column and 7.7 for the vertical one.
 
   | run | horizontal, columns reversed | vertical, rows reversed |
   |---|---:|---:|
   | Dense, RoPE-1D | 80.5% | 31.9% |
   | Dense, NoPE | 82.0% | 51.7% |
-  | Hybrid, RoPE-1D | 27.7% | 58.3% |
+  | Hybrid, RoPE-1D (seeds 42 / 43) | 27.7% / 30.8% | 58.3% / 65.5% |
   | Hybrid, RoPE-2D | 36.9% | 61.2% |
   | Hybrid, NoPE | 19.0% | 87.7% |
-  | Hybrid, NoPE + 2D conv | 19.5% | 28.6% |
+  | Hybrid, NoPE + 2D conv (seeds 42 / 43) | 19.5% / 22.1% | 28.6% / 20.9% |
+  | Hybrid, RoPE-1D + 2D conv | 20.0% | 21.0% |
 
-  The recurrence of the linear layers reads horizontal order. Without RoPE, the hybrid reads vertical position from
-  the encoder's features. With the 2D convolution, it reads vertical position from the token grid instead.
-- Accuracy is similar across runs. The harder probe gives 91–95% on both axes, COCO retrieval 98%, and What'sUp is
-  near chance at this scale. The 2D convolution costs 0.0025 caption BPB and no text BPB.
-- Pending:
-  - the seed spread (h-rope1d-s2, h-nope-conv2d-s2), which every difference above is to be compared with;
-  - the raw-patch replication, where position must come from the backbone;
-  - the RoPE-1D + 2D-convolution comparison.
+  - The recurrence of the linear layers reads horizontal order.
+  - Without RoPE, the hybrid reads vertical position from the encoder's features.
+  - With the 2D convolution, it reads vertical position from the token grid, in both position modes.
+  - RoPE-2D does not change where vertical position is read from, and shifts horizontal reading only slightly
+    towards content (+9.2 points, against a 6.3-point threshold).
+- **Accuracy.** No run differs from another by more than twice the seed spread on either axis of the harder probe
+  (88–96%). COCO retrieval is 98% for every run, and What'sUp is near chance at this scale.
+- **Pending.** The raw-patch replication, where position must come from the backbone.
 
 ## Open questions
 
