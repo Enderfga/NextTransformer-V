@@ -316,7 +316,9 @@ def render(runs, decision, position=None, sec=None):
 <h2>学习曲线</h2><div class="smalls">{curves(runs, key, "vertical_acc2", "垂直关系 acc2（合成探针）")}
 {curves(runs, key, "horizontal_acc2", "水平关系 acc2（合成探针）")}
 {curves(runs, key, "vertical_acc2", "垂直关系 acc2（难版探针）", "hard")}
-{curves(runs, raw, "vertical_acc2", "垂直关系 acc2（难版探针，原始像素输入）", "hard")}</div>
+{curves(runs, raw, "vertical_acc2", "垂直关系 acc2（难版探针，原始像素输入）", "hard")}
+{curves(runs, key, "vflip_vertical_acc2", "行倒序后的垂直 acc2（难版探针；越低越依赖 token 顺序）", "hard")}
+{curves(runs, raw, "vflip_vertical_acc2", "行倒序后的垂直 acc2（难版探针，原始像素输入）", "hard")}</div>
 <h2>全部指标</h2>{table}
 <p>BPB 越低越好；"看图增益"= 把图像换成别的图像后 caption BPB 的上升；What'sUp 为真实照片（on/under 算垂直，
 left/right 算水平）；COCO 检索为 5 选 1（随机 20%）。</p>
