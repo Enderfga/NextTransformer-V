@@ -106,7 +106,23 @@ per update with the current kernels.
     towards content (+9.2 points, against a 6.3-point threshold).
 - **Accuracy.** No run differs from another by more than twice the seed spread on either axis of the harder probe
   (88–96%). COCO retrieval is 98% for every run, and What'sUp is near chance at this scale.
-- **Pending.** The raw-patch replication, where position must come from the backbone.
+- **Resolution transfer** (exploratory, `docs/spatial-addendum.md`). Final checkpoints are scored without retraining on
+  the same images at 576 and 768 px, that is 18 x 18 and 24 x 24 tokens per image instead of 12 x 12. At 768 px,
+  vertical acc2 changes as follows:
+
+  | backbone and position mode | vertical acc2 change at 768 px |
+  |---|---:|
+  | RoPE-1D (Dense, and the hybrid with two seeds) | -13 to -20 points |
+  | NoPE | -5 points at most |
+  | NoPE hybrid with the 2D convolution (two seeds) | +1.8 / -1.1 points |
+
+  The seed spread of the change is 7.0 points. The track can therefore separate position designs by how they
+  generalize to new resolutions, even when they tie at the training resolution.
+- **Layer probe.** Every backbone derives a token's row from token order within a few layers (R² 0.83–0.98), but
+  almost none of its column (≤ 0.15). The hybrids keep the encoder's position in every layer; Dense with RoPE-1D loses
+  much of it in the middle layers. GDN forget gates retain more state over image tokens than over text.
+- **Pending.** The raw-patch replication pair, where the encoder supplies no position. Without the convolution, the
+  NoPE hybrid reads vertical relations from token order (97.6%) but not horizontal ones (51%, chance).
 
 ## Open questions
 
