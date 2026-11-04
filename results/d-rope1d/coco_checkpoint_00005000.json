@@ -1,0 +1,16 @@
+{
+  "method": "dense_full",
+  "step": 5000,
+  "checkpoint": "runs/d-rope1d/checkpoint_00005000",
+  "images": 5000,
+  "order": "raster",
+  "position": "rope1d",
+  "conv2d": "none",
+  "visual": "siglip",
+  "bad_images": 0,
+  "caption_bpb": 0.8472122389086529,
+  "caption_bpb_without_image": 1.3215397731449416,
+  "retrieval_raw": 0.8812,
+  "retrieval_pmi": 0.982,
+  "chance": 0.2
+}

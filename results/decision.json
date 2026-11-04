@@ -1,0 +1,148 @@
+{
+  "seed_spread": null,
+  "seed_spreads": [],
+  "decisions": [
+    {
+      "mode": "NoPE",
+      "treated": "h-nope-conv2d",
+      "baseline": "h-nope",
+      "verdict": "pending",
+      "gain": 0.0009794319294809117,
+      "caption_bpb_delta": 0.0024631529299073973,
+      "text_bpb_delta": 6.513941845032178e-05
+    },
+    {
+      "mode": "RoPE-1D",
+      "treated": "h-rope1d-conv2d",
+      "baseline": "h-rope1d",
+      "verdict": "pending"
+    },
+    {
+      "mode": "NoPE, raw patches",
+      "treated": "r-h-nope-conv2d",
+      "baseline": "r-h-nope",
+      "verdict": "pending"
+    }
+  ],
+  "required_complete": true,
+  "secondary": {
+    "hard_seed_spread": {
+      "vertical_acc2": null,
+      "horizontal_acc2": null,
+      "vflip_vertical_acc2": null,
+      "hflip_horizontal_acc2": null
+    },
+    "hard_contrasts": [
+      {
+        "label": "\u4e8c\u7ef4\u5377\u79ef \u00b7 NoPE",
+        "treated": "h-nope-conv2d",
+        "baseline": "h-nope",
+        "diff": {
+          "vertical_acc2": -0.03165182987141435,
+          "horizontal_acc2": 0.01213346814964611,
+          "vflip_vertical_acc2": -0.5914935707220574,
+          "hflip_horizontal_acc2": 0.0050556117290192215
+        }
+      },
+      {
+        "label": "\u4e8c\u7ef4\u5377\u79ef \u00b7 RoPE-1D",
+        "treated": "h-rope1d-conv2d",
+        "baseline": "h-rope1d",
+        "diff": {
+          "vertical_acc2": null,
+          "horizontal_acc2": null,
+          "vflip_vertical_acc2": null,
+          "hflip_horizontal_acc2": null
+        }
+      },
+      {
+        "label": "\u4e8c\u7ef4\u5377\u79ef \u00b7 NoPE, raw patches",
+        "treated": "r-h-nope-conv2d",
+        "baseline": "r-h-nope",
+        "diff": {
+          "vertical_acc2": null,
+          "horizontal_acc2": null,
+          "vflip_vertical_acc2": null,
+          "hflip_horizontal_acc2": null
+        }
+      },
+      {
+        "label": "RoPE-2D \u5bf9 RoPE-1D\uff08\u6df7\u5408\uff09",
+        "treated": "h-rope2d",
+        "baseline": "h-rope1d",
+        "diff": {
+          "vertical_acc2": -0.01879327398615227,
+          "horizontal_acc2": 0.01213346814964611,
+          "vflip_vertical_acc2": 0.029673590504451064,
+          "hflip_horizontal_acc2": 0.09201213346814963
+        }
+      },
+      {
+        "label": "NoPE \u5bf9 RoPE-1D\uff08\u6df7\u5408\uff09",
+        "treated": "h-nope",
+        "baseline": "h-rope1d",
+        "diff": {
+          "vertical_acc2": 0.006923837784371889,
+          "horizontal_acc2": 0.005055611729019138,
+          "vflip_vertical_acc2": 0.294757665677547,
+          "hflip_horizontal_acc2": -0.08695652173913046
+        }
+      },
+      {
+        "label": "NoPE \u5bf9 RoPE-1D\uff08Dense\uff09",
+        "treated": "d-nope",
+        "baseline": "d-rope1d",
+        "diff": {
+          "vertical_acc2": 0.0,
+          "horizontal_acc2": -0.013144590495449915,
+          "vflip_vertical_acc2": 0.19782393669634019,
+          "hflip_horizontal_acc2": 0.015166835187057637
+        }
+      },
+      {
+        "label": "\u6df7\u5408\u5bf9 Dense\uff08RoPE-1D\uff09",
+        "treated": "h-rope1d",
+        "baseline": "d-rope1d",
+        "diff": {
+          "vertical_acc2": -0.007912957467853587,
+          "horizontal_acc2": -0.04044489383215366,
+          "vflip_vertical_acc2": 0.2631058358061325,
+          "hflip_horizontal_acc2": -0.5278058645096056
+        }
+      },
+      {
+        "label": "\u6df7\u5408\u5bf9 Dense\uff08NoPE\uff09",
+        "treated": "h-nope",
+        "baseline": "d-nope",
+        "diff": {
+          "vertical_acc2": -0.0009891196834816984,
+          "horizontal_acc2": -0.022244691607684608,
+          "vflip_vertical_acc2": 0.36003956478733934,
+          "hflip_horizontal_acc2": -0.6299292214357938
+        }
+      },
+      {
+        "label": "Hilbert \u5bf9\u9010\u884c\u987a\u5e8f\uff08\u6df7\u5408 \u00b7 NoPE\uff09",
+        "treated": "h-nope-hilbert",
+        "baseline": "h-nope",
+        "diff": {
+          "vertical_acc2": null,
+          "horizontal_acc2": null,
+          "vflip_vertical_acc2": null,
+          "hflip_horizontal_acc2": null
+        }
+      },
+      {
+        "label": "\u4e8c\u7ef4\u5377\u79ef \u00b7 RoPE-2D",
+        "treated": "h-rope2d-conv2d",
+        "baseline": "h-rope2d",
+        "diff": {
+          "vertical_acc2": null,
+          "horizontal_acc2": null,
+          "vflip_vertical_acc2": null,
+          "hflip_horizontal_acc2": null
+        }
+      }
+    ]
+  }
+}

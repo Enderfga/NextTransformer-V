@@ -1,0 +1,34 @@
+# The pilot runs of the 2D-position study, in the order they were planned. "<run> <method> [ntv.train arguments]".
+# Every run: 5,000 updates of 128 rows x 8,192 tokens, seed 42 unless stated, compute matched to the Dense anchor.
+# Pre-registration: docs/spatial-preregistration.md; secondary analyses: docs/spatial-addendum.md.
+
+# Diagnostic grid (frozen SigLIP2 tokens, raster patch order)
+d-rope1d dense_full
+d-nope dense_full --position nope
+h-rope1d gdn_hybrid
+h-nope gdn_hybrid --position nope
+h-rope2d gdn_hybrid --position rope2d
+h-nope-conv2d gdn_hybrid --position nope --conv2d k
+
+# Seed pairs (noise estimate)
+h-rope1d-s2 gdn_hybrid --seed 43
+h-nope-conv2d-s2 gdn_hybrid --position nope --conv2d k --seed 43
+
+# Pre-registered 2D-convolution comparisons beyond the grid
+h-rope1d-conv2d gdn_hybrid --conv2d k
+r-h-nope gdn_hybrid --position nope --visual raw32
+r-h-nope-conv2d gdn_hybrid --position nope --conv2d k --visual raw32
+
+# Exploratory (raw 32 px patches carry no position embedding; other mixes and orders)
+r-h-rope1d gdn_hybrid --visual raw32
+r-h-rope2d gdn_hybrid --position rope2d --visual raw32
+r-d-rope1d dense_full --visual raw32
+r-d-nope dense_full --position nope --visual raw32
+r-h-rope1d-conv2d gdn_hybrid --conv2d k --visual raw32
+h-rope2d-conv2d gdn_hybrid --position rope2d --conv2d k
+h-nope-hilbert gdn_hybrid --position nope --order hilbert
+
+# Backbone benchmark at 8,192 tokens (RoPE-1D, SigLIP2)
+bench-gdn gdn
+bench-qsa_hybrid qsa_hybrid --sparse-backend kernel
+bench-mhc mhc
