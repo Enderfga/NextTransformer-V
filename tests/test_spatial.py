@@ -218,3 +218,97 @@ def test_harder_probe_layout(tmp_path):
     assert distances <= set(range(1, 8)) and max(distances) > 3
     assert {item["axis"] for item in items} == {"horizontal", "vertical"}
     assert all(len(set(item["candidates"].values())) == 4 for item in items)
+
+
+# Other image grids (zero-shot resolution transfer): the default grid must stay bitwise identical.
+
+def grid_image(grid, start=5, batch=2):
+    mask = torch.zeros((batch, T), dtype=torch.bool)
+    mask[:, start:start + grid * grid] = True
+    return mask, torch.randn(int(mask.sum()), DIM)
+
+
+@pytest.mark.parametrize("spatial", [dict(), dict(position="nope"), dict(position="rope2d", order="hilbert"),
+                                     dict(conv2d="k", position="rope2d")])
+def test_explicit_default_grid_is_bitwise_identical(spatial):
+    c, model = build("gdn_hybrid", **spatial)
+    model.eval()
+    idx = torch.randint(c.vocab_size, (2, T))
+    mask, features = one_image()
+    with torch.no_grad():
+        with visual_inputs(model, mask, features):
+            a = model(idx)
+        with visual_inputs(model, mask, features, grid=GRID):
+            b = model(idx)
+    assert torch.equal(a, b)
+
+
+@pytest.mark.parametrize("spatial", [dict(), dict(position="nope"), dict(position="rope2d", order="hilbert"),
+                                     dict(conv2d="k"), dict(conv2d="qkv", position="rope2d")])
+def test_larger_grids_run_and_leave_the_text_before_the_image_alone(spatial):
+    c, model = build("gdn_hybrid", **spatial)
+    model.eval()
+    idx = torch.randint(c.vocab_size, (2, T))
+    mask, features = grid_image(18)
+    with torch.no_grad():
+        with visual_inputs(model, mask, features, grid=18):
+            out = model(idx)
+        moved = features.clone()
+        moved[-1] += 1.
+        with visual_inputs(model, mask, moved, grid=18):
+            changed = model(idx)
+    assert torch.isfinite(out).all()
+    torch.testing.assert_close(changed[:, :5], out[:, :5], atol=0, rtol=0)
+    assert not torch.equal(changed[:, 5 + 18 * 18:], out[:, 5 + 18 * 18:])
+    with pytest.raises(ValueError):
+        with visual_inputs(model, mask, features[:-1], grid=18):
+            pass
+
+
+def test_rope2d_coordinates_follow_rope_tv_on_a_larger_grid():
+    _, model = build("dense_full", position="rope2d")
+    g = 18
+    mask, _ = grid_image(g, start=5, batch=1)
+    cos, sin = rotary_tables(model, mask, patch_order("raster", g), "rope2d", grid=g)
+    half = cos.shape[-1]
+    inv = 1.0 / (100000 ** (torch.arange(0, 2 * half, 2, dtype=torch.float32) / (2 * half)))
+    angle = torch.atan2(sin[0, :, 0], cos[0, :, 0])
+
+    def expect(px, py):
+        a = torch.where(torch.arange(half) % 2 == 0, px * inv, py * inv)
+        return torch.atan2(a.sin(), a.cos())
+
+    base = 5 - 1 + (g * g - g) / 2
+    for slot, (i, j) in ((0, (0, 0)), (1, (0, 1)), (g + 1, (1, 1)), (g * g - 1, (g - 1, g - 1))):
+        torch.testing.assert_close(angle[5 + slot], expect(base + i + 1, base + j + 1), atol=2e-3, rtol=0)
+    torch.testing.assert_close(angle[2], expect(2., 2.), atol=2e-3, rtol=0)
+
+
+@pytest.mark.parametrize("g", [GRID, 18])
+def test_2d_convolution_mixes_grid_neighbours_on_any_grid(g):
+    import torch.nn.functional as F
+    from ntv.spatial import _conv_hook
+    c, model = build("gdn_hybrid", conv2d="k")
+    name, conv = next(iter(model.image_convs.items()))
+    hook = _conv_hook(model, conv)
+    d = conv.weight.shape[0]
+    mask, features = grid_image(g, batch=1)
+    x = torch.randn(1, T, d)
+    output = torch.randn(1, T, d)
+    with torch.no_grad(), visual_inputs(model, mask, features, grid=g):
+        got = hook(None, (x,), output)
+    grid = x[0, 5:5 + g * g].view(g, g, d).permute(2, 0, 1)[None]
+    expected = F.silu(conv(grid))[0].permute(1, 2, 0).reshape(g * g, d)
+    torch.testing.assert_close(got[0, 5:5 + g * g], expected)
+    assert torch.equal(got[0, :5], output[0, :5]) and torch.equal(got[0, 5 + g * g:], output[0, 5 + g * g:])
+
+
+@pytest.mark.parametrize("size", [384, 576, 768])
+def test_raw_patches_keep_32px_tiles_at_any_size(size):
+    g = size // 32
+    images = torch.randint(0, 255, (2, 3, size, size), dtype=torch.uint8)
+    out = RawPatches(dtype=torch.float32)(images)
+    assert out.shape == (2 * g * g, RAW_DIM)
+    i, j = 3, g - 2
+    tile = images[1, :, 32 * i:32 * (i + 1), 32 * j:32 * (j + 1)].float().div(127.5).sub(1.)
+    torch.testing.assert_close(out[g * g + i * g + j], tile.reshape(-1))

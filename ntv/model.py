@@ -99,20 +99,24 @@ def build_mm_model(config, device="cpu", seed=42, visual_dim=VISUAL_DIM, spatial
 
 
 @contextmanager
-def visual_inputs(model, image_mask, features, index=None):
+def visual_inputs(model, image_mask, features, index=None, grid=None):
     """Make (image_mask, features) visible to the hooks for one forward call.
 
-    image_mask: (B, T) bool, True at image positions; each image is a contiguous run of 144 positions.
+    image_mask: (B, T) bool, True at image positions; each image is a contiguous run of grid x grid positions.
     features:   (image_mask.sum(), visual_dim): each image's tokens in row-major grid order (the encoder's
                 order); a spatial patch order, if configured, is applied here.
     index:      flat indices of the image positions; computed from image_mask when omitted (pass it for
                 shape-only audits, where it cannot be computed).
+    grid:       patches per image side; the track trains with 12 (144 tokens), larger grids are for
+                zero-shot resolution transfer at evaluation.
     `model` is the unwrapped module (pass `ddp.module` when training with DDP).
     """
     if image_mask.dtype != torch.bool or image_mask.ndim != 2:
         raise ValueError("image_mask must be a (B, T) bool tensor")
     if features.ndim != 2 or features.shape[1] != model.visual_dim:
         raise ValueError(f"features must be (N, {model.visual_dim})")
+    from ntv.spatial import GRID, grid_orders, rotary_tables
+    grid = grid or GRID
     shape_only = isinstance(image_mask, FakeTensor) or isinstance(features, FakeTensor)
     if not shape_only and features.shape[0] != int(image_mask.sum()):
         raise ValueError("one feature row is required per image position")
@@ -121,12 +125,15 @@ def visual_inputs(model, image_mask, features, index=None):
     spatial = getattr(model, "spatial", None)
     swapped = None
     if spatial is not None:
-        from ntv.spatial import TOKENS, rotary_tables
-        features = features.view(-1, TOKENS, features.shape[-1])[:, model._order].reshape(-1, features.shape[-1])
+        if not shape_only and features.shape[0] % (grid * grid):
+            raise ValueError(f"image features must come in whole {grid} x {grid} images")
+        order = grid_orders(model, grid)
+        features = features.view(-1, grid * grid, features.shape[-1])[:, order[0]].reshape(-1, features.shape[-1])
+        model._grid, model._active_order = grid, order
         model._visual_index = image_mask.reshape(-1).nonzero().squeeze(1) if index is None else index
         if spatial["position"] != "rope1d" and not shape_only:
             swapped = (model.cos, model.sin)
-            model.cos, model.sin = rotary_tables(model, image_mask, model._order, spatial["position"])
+            model.cos, model.sin = rotary_tables(model, image_mask, order[0], spatial["position"], grid=grid)
     model._visual = (image_mask, features)
     try:
         yield
@@ -134,6 +141,7 @@ def visual_inputs(model, image_mask, features, index=None):
         model._visual = None
         if spatial is not None:
             model._visual_index = None
+            model._grid, model._active_order = GRID, grid_orders(model, GRID)
         if swapped is not None:
             model.cos, model.sin = swapped
 

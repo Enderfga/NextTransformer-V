@@ -82,10 +82,18 @@ def score(items, relations, with_image, without):
                 **{f"{key}_count": g[3] for key, g in ordered})
 
 
-def probe(model, encoder, directory, tok, device, length=200, batch=64, limit=None, scrambles=()):
-    """Scores of a loaded model on the probe in `directory` (eval.jsonl + images), also under each scramble."""
+def probe(model, encoder, directory, tok, device, length=200, batch=64, limit=None, scrambles=(), size=384):
+    """Scores of a loaded model on the probe in `directory` (eval.jsonl + images), also under each scramble.
+
+    `size`: the side the images are resized to. 384 px is the training resolution (12 x 12 tokens); a larger size
+    shows the same images on a finer token grid (size / 32 per side), for zero-shot resolution transfer. `length`
+    is the row length at 384 px; it grows with the image so the caption budget stays the same.
+    """
+    from ntv.spatial import PATCH
+    grid = size // PATCH
+    length += grid * grid - GRID * GRID
     items = [json.loads(line) for line in open(Path(directory) / "eval.jsonl")][:limit]
-    images = [decode_image((Path(directory) / item["image"]).read_bytes())[0] for item in items]
+    images = [decode_image((Path(directory) / item["image"]).read_bytes(), size)[0] for item in items]
     bos = tok.get_bos_token_id()
     relations = list(items[0]["candidates"])  # the same candidate relations, in the same order, for every item
     if any(list(item["candidates"]) != relations for item in items):
@@ -93,14 +101,14 @@ def probe(model, encoder, directory, tok, device, length=200, batch=64, limit=No
     ids = tok.encode([item["candidates"][r] for item in items for r in relations], num_threads=8)
     n, k = len(items), len(relations)
     examples = [(i // k, ids[i]) for i in range(n * k)]
-    with_image, _ = caption_losses(model, encoder, examples, images, length, bos, device, batch)
+    with_image, _ = caption_losses(model, encoder, examples, images, length, bos, device, batch, grid)
     without, _ = caption_losses(model, encoder, [(None, ids[i]) for i in range(n * k)], images,
-                                length, bos, device, batch)
+                                length, bos, device, batch, grid)
     without = without.reshape(n, k)
-    result = dict(images=n, **score(items, relations, with_image.reshape(n, k), without))
+    result = dict(images=n, image_size=size, grid=grid, **score(items, relations, with_image.reshape(n, k), without))
     for mode in scrambles:
-        scrambled, _ = caption_losses(model, Scrambled(encoder, scramble_index(mode)), examples, images,
-                                      length, bos, device, batch)
+        scrambled, _ = caption_losses(model, Scrambled(encoder, scramble_index(mode, grid)), examples, images,
+                                      length, bos, device, batch, grid)
         result.update({f"{mode}_{key}": value for key, value in
                        score(items, relations, scrambled.reshape(n, k), without).items()
                        if not key.endswith("_count")})
@@ -118,6 +126,8 @@ def main():
     parser.add_argument("--batch", type=int, default=64)
     parser.add_argument("--limit", type=int)
     parser.add_argument("--scrambles", default=",".join(SCRAMBLES), help="comma-separated; empty for none")
+    parser.add_argument("--size", type=int, default=384,
+                        help="image side in pixels; above 384 the same images are shown on a finer token grid")
     args = parser.parse_args()
     scrambles = tuple(mode for mode in args.scrambles.split(",") if mode)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -126,7 +136,7 @@ def main():
     model, config, step, encoder, settings = load_model(args.checkpoint, device, args.encoder)
     result = dict(method=config.method, step=step, checkpoint=str(args.checkpoint), **settings,
                   **probe(model, encoder, args.probe, tok, device, args.length, args.batch, args.limit,
-                        scrambles))
+                        scrambles, args.size))
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps({k: (round(v, 4) if isinstance(v, float) else v) for k, v in result.items()}, indent=1))

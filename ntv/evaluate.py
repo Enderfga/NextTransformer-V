@@ -44,14 +44,14 @@ def load_model(checkpoint, device, encoder_path=None):
     return model, config, saved["state"]["step"], encoder, dict(spatial, visual=train.get("visual", "siglip"))
 
 
-def rows(examples, length, bos, with_image):
+def rows(examples, length, bos, with_image, image_tokens=IMAGE_TOKENS):
     """examples: (image slot or None, caption ids) -> inputs, targets, image mask."""
     b = len(examples)
     ids = torch.zeros((b, length + 1), dtype=torch.long)
     targets = torch.full((b, length), -1, dtype=torch.long)
     mask = torch.zeros((b, length), dtype=torch.bool)
     for i, (_, caption) in enumerate(examples):
-        start = 1 + IMAGE_TOKENS if with_image else 1
+        start = 1 + image_tokens if with_image else 1
         n = min(len(caption), length - start)
         ids[i, 0] = bos
         ids[i, start:start + n] = torch.tensor(caption[:n])
@@ -62,24 +62,27 @@ def rows(examples, length, bos, with_image):
 
 
 @torch.no_grad()
-def caption_losses(model, encoder, examples, images, length, bos, device, batch):
-    """Summed loss (nats) and token count of each example's caption."""
+def caption_losses(model, encoder, examples, images, length, bos, device, batch, grid=None):
+    """Summed loss (nats) and token count of each example's caption. `grid`: patches per image side of the
+    encoder's output (12 at the training resolution)."""
+    from ntv.spatial import GRID
+    grid = grid or GRID
     with_image = examples[0][0] is not None
     nats, counts = [], []
     for first in range(0, len(examples), batch):
         chunk = examples[first:first + batch]
-        x, y, mask = rows(chunk, length, bos, with_image)
+        x, y, mask = rows(chunk, length, bos, with_image, grid * grid)
         x, y, mask = x.to(device), y.to(device), mask.to(device)
         if with_image:
             slots = [slot for slot, _ in chunk]
             unique = sorted(set(slots))
             pixels = torch.from_numpy(np.stack([images[s] for s in unique])).to(device)
-            encoded = encoder(pixels).view(len(unique), IMAGE_TOKENS, -1)
+            encoded = encoder(pixels).view(len(unique), grid * grid, -1)
             index = torch.tensor([unique.index(s) for s in slots], device=device)
             features = encoded[index].reshape(-1, encoded.shape[-1])
         else:
             features = torch.zeros((0, model.visual_dim), device=device)
-        with visual_inputs(model, mask, features):
+        with visual_inputs(model, mask, features, grid=grid):
             loss = model(x, y, loss_reduction="none").view_as(y).double()
         valid = y >= 0
         nats += (loss * valid).sum(1).tolist()

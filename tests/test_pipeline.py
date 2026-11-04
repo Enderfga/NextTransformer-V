@@ -168,7 +168,8 @@ def test_spatial_probe_runs_on_a_spatial_checkpoint(packed, tmp_path, monkeypatc
             self.proj = torch.randn(3, 4608, generator=torch.Generator().manual_seed(0))
 
         def forward(self, images):
-            return (images.float().mean((2, 3)) / 255 @ self.proj).repeat_interleave(IMAGE_TOKENS, 0)
+            tokens = (images.shape[-1] // 32) ** 2  # 144 at 384 px, more on larger images
+            return (images.float().mean((2, 3)) / 255 @ self.proj).repeat_interleave(tokens, 0)
 
     class FakeTokenizer:
         @staticmethod
@@ -208,6 +209,14 @@ def test_spatial_probe_runs_on_a_spatial_checkpoint(packed, tmp_path, monkeypatc
     for mode in ("vflip", "hflip", "shuffle"):
         assert 0 <= result[f"{mode}_vertical_acc2"] <= 1 and np.isfinite(result[f"{mode}_all_margin2"])
     assert np.isfinite(result["vertical_margin2"]) and "vflip_all_count" not in result
+    assert result["image_size"] == 384 and result["grid"] == 12
+    larger = tmp_path / "spatial576.json"
+    monkeypatch.setattr(sys, "argv", ["spatial_eval", "--checkpoint", str(checkpoint), "--probe", str(probe),
+                                      "--resources", str(resources.parent), "--out", str(larger),
+                                      "--batch", "8", "--size", "576"])
+    ntv.spatial_eval.main()
+    result = json.loads(larger.read_text())
+    assert result["grid"] == 18 and result["images"] == 6 and 0 <= result["vflip_vertical_acc2"] <= 1
 
 
 def test_text_buffer_conserves_tokens_and_drains_long_documents():
