@@ -1,0 +1,22 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+html,body{margin:0;background:transparent}
+.card{width:1240px;height:420px;box-sizing:border-box;padding:14px;border-radius:34px;background:var(--frame)}
+.inner{width:100%;height:100%;box-sizing:border-box;border-radius:24px;display:flex;align-items:center;gap:34px;
+  padding:0 40px 0 46px;background:linear-gradient(115deg,#ffffff 0%,#fbfbff 50%,#f1f3fe 100%);font-family:Inter,sans-serif}
+.text{flex:0 0 500px}
+.eyebrow{display:flex;align-items:center;gap:16px;font-weight:700;font-size:15px;letter-spacing:.2em;color:var(--accent)}
+.icon{width:58px;height:58px;border-radius:17px;background:var(--icon);box-shadow:0 10px 20px var(--glow);display:grid;place-items:center}
+h2{font-weight:800;font-size:40px;line-height:1.1;color:#1d2433;margin:20px 0 14px;letter-spacing:-.015em}
+p{font-size:19px;line-height:1.5;color:#5b6272;margin:0 0 20px}
+.link{font-weight:700;font-size:18px;color:var(--accent)}
+.visual{flex:1;min-width:0;height:330px;overflow:hidden;border-radius:24px;background:#f8f9fe;border:1.5px solid #e2e6f4;
+  box-shadow:inset 0 1px 0 #fff;display:flex;align-items:center;justify-content:center}
+svg text{font-family:Inter,sans-serif}
+.visual svg{width:94%;height:auto}
+
+.card{--accent:#c24f22;--frame:linear-gradient(120deg,#f08a5d,#f3a07e 55%,#f7c2a8);--icon:linear-gradient(135deg,#f49a6c,#e0622c);--glow:rgba(224,98,44,.35)}</style></head><body>
+<div class="card"><div class="inner"><div class="text">
+<div class="eyebrow"><div class="icon"><svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M5 25V14M12 25V6M19 25v-8M26 25V10"/></svg></div>03 · FINDING</div>
+<h2>2D mixing changes how,<br>not how well</h2><p>A 2D short convolution makes the hybrid read vertical position from the token grid instead of the encoder's features. Its accuracy stays within seed noise.</p><div class="link">See the results &rarr;</div></div>
+<div class="visual"><svg viewBox="0 0 640 300"><text x="24" y="34" font-size="15.5" font-weight="700" fill="#7a8194" letter-spacing="1.4">VERTICAL ACCURACY, TOKEN ROWS REVERSED</text><text x="24" y="67" font-size="17.2" font-weight="600" fill="#1d2433">Hybrid · NoPE</text><rect x="262" y="53" width="300" height="20" rx="10" fill="#e9ecf6"/><rect x="262" y="53" width="263.1" height="20" rx="10" fill="#f2a88a"/><text x="535.1" y="68" font-size="16.1" font-weight="700" fill="#1d2433">87.7%</text><text x="24" y="101" font-size="17.2" font-weight="600" fill="#1d2433">Hybrid · NoPE + 2D conv</text><rect x="262" y="87" width="300" height="20" rx="10" fill="#e9ecf6"/><rect x="262" y="87" width="85.8" height="20" rx="10" fill="#eb6834"/><text x="357.8" y="102" font-size="16.1" font-weight="700" fill="#1d2433">28.6%</text><text x="262" y="136" font-size="15.5" font-weight="700" fill="#c24f22">−59 points · beyond 2× seed spread (15.4)</text><text x="24" y="172" font-size="15.5" font-weight="700" fill="#7a8194" letter-spacing="1.4">VERTICAL ACCURACY</text><text x="24" y="205" font-size="17.2" font-weight="600" fill="#1d2433">Hybrid · NoPE</text><rect x="262" y="191" width="300" height="20" rx="10" fill="#e9ecf6"/><rect x="262" y="191" width="282.0" height="20" rx="10" fill="#f2a88a"/><text x="554.0" y="206" font-size="16.1" font-weight="700" fill="#1d2433">94.0%</text><text x="24" y="239" font-size="17.2" font-weight="600" fill="#1d2433">Hybrid · NoPE + 2D conv</text><rect x="262" y="225" width="300" height="20" rx="10" fill="#e9ecf6"/><rect x="262" y="225" width="272.4" height="20" rx="10" fill="#eb6834"/><text x="544.4" y="240" font-size="16.1" font-weight="700" fill="#1d2433">90.8%</text><text x="262" y="274" font-size="15.5" font-weight="500" fill="#5b6272">−3.2 points · within 2× seed spread (5.7)</text></svg></div></div></div></body></html>

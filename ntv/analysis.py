@@ -344,9 +344,9 @@ left/right 算水平）；COCO 检索为 5 选 1（随机 20%）。</p>
 
 
 FIGURE_STYLE = (
-    "<style>text{font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif}"
-    ".grid{stroke:#e6e5e1;stroke-width:1}.tick,.row,.end,.key{fill:#52514e;font-size:12px}"
-    ".title{fill:#0b0b0b;font-size:14px;font-weight:600}.sub{fill:#52514e;font-size:12px}"
+    "<style>text{font-family:Inter,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif}"
+    ".grid{stroke:#e6e8f0;stroke-width:1}.tick,.row,.end,.key{fill:#4b5263;font-size:12px}"
+    ".title{fill:#1d2433;font-size:16px;font-weight:700}.sub{fill:#5b6272;font-size:12.5px}"
     ".link{stroke:#7a7975;stroke-width:2;stroke-linecap:round}.dot{stroke:#fcfcfb;stroke-width:2}"
     ".s1,.c1{fill:#2a78d6}.s2,.c2{fill:#eb6834}.c3{fill:#1baf7a}.c4{fill:#eda100}"
     ".line{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}path.c1{stroke:#2a78d6}"
@@ -362,8 +362,8 @@ def figure(svg, title, subtitle, keys, width=760):
     w, h = (float(v) for v in re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', svg).groups())
     inner = svg[svg.index(">") + 1:svg.rindex("</svg>")]
     lines = [subtitle] if isinstance(subtitle, str) else list(subtitle)
-    parts = [f'<text class="title" x="12" y="20">{escape(title)}</text>']
-    y = 20
+    parts = [f'<text class="title" x="12" y="24">{escape(title)}</text>']
+    y = 24
     for line in lines:
         y += 18
         parts.append(f'<text class="sub" x="12" y="{y}">{escape(line)}</text>')
@@ -375,10 +375,13 @@ def figure(svg, title, subtitle, keys, width=760):
         parts.append(f'<circle class="dot {slot}" cx="{x + 5}" cy="{y - 4}" r="5"/>'
                      f'<text class="key" x="{x + 15}" y="{y}">{escape(label)}</text>')
         x += size
-    head, scale = y + 14, width / w
-    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {head + h * scale:.0f}" role="img" '
-            f'aria-label="{escape(title)}">{FIGURE_STYLE}<rect width="100%" height="100%" fill="#fcfcfb"/>'
-            f'{"".join(parts)}<g transform="translate(0,{head}) scale({scale:.4f})">{inner}</g></svg>\n')
+    head, scale = y + 14, min(width / w, 1.25)
+    shift = (width - w * scale) / 2
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width + 20} {head + h * scale + 36:.0f}" role="img" '
+            f'aria-label="{escape(title)}">{FIGURE_STYLE}<rect x="1" y="1" width="{width + 18}" '
+            f'height="{head + h * scale + 34:.0f}" rx="16" fill="#fbfbfe" stroke="#e2e6f4" stroke-width="1.5"/>'
+            f'<g transform="translate(10,10)">{"".join(parts)}<g transform="translate({shift:.1f},{head}) scale({scale:.4f})">'
+            f'{inner}</g></g></svg>\n')
 
 
 def write_figures(runs, directory):
