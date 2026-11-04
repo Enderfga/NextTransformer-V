@@ -215,6 +215,8 @@ background:var(--surface-1);color:var(--text-primary);max-width:980px;margin:0 a
 --grid:#33332f;--series-1:#3987e5;--series-2:#d95926;--series-3:#199e70;--series-4:#c98500;--good:#5cb878;--bad:#e2725f}}
 body{margin:0;background:var(--surface-1)} h1{font-size:22px;margin:0 0 4px} h2{font-size:17px;margin:28px 0 8px}
 p,li{color:var(--text-secondary)} .tiles{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0}
+.conclusion{background:var(--surface-2);border-radius:10px;padding:4px 18px}
+.conclusion p,.conclusion li{color:var(--text-primary)}
 .tile{background:var(--surface-2);border-radius:10px;padding:12px 16px;min-width:220px}
 .tile .k{font-size:13px;color:var(--text-muted)} .tile .v{font-size:22px;font-weight:600}
 .tile .s{font-size:13px;color:var(--text-secondary)} svg{width:100%;height:auto;display:block}
@@ -243,7 +245,22 @@ document.querySelectorAll('[data-tip]').forEach(el=>{
 """
 
 
-def render(runs, decision, position=None, sec=None):
+def markdown_blocks(text):
+    """The small subset of Markdown used by the conclusion: paragraphs, "- " lists and **bold**."""
+    import re
+    def inline(s):
+        return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", escape(s))
+    out, items = [], []
+    for block in text.strip().split("\n\n"):
+        lines = [l.strip() for l in block.splitlines() if l.strip()]
+        if lines and all(l.startswith("- ") for l in lines):
+            out.append("<ul>" + "".join(f"<li>{inline(l[2:])}</li>" for l in lines) + "</ul>")
+        elif lines:
+            out.append(f"<p>{inline(' '.join(lines))}</p>")
+    return "".join(out)
+
+
+def render(runs, decision, position=None, sec=None, conclusion=None):
     order = [n for n in LABELS if n in runs] + sorted(n for n in runs if n not in LABELS)
     tiles = []
     for d in decision["decisions"]:
@@ -298,6 +315,7 @@ def render(runs, decision, position=None, sec=None):
 <h1>混合骨干 VLM 里，图像的二维位置从哪来？</h1>
 <p>所有 run 算力对齐（训练 FLOPs/token 在 Dense 锚点 ±1% 内），5,000 步、约 52 亿 token、8K 上下文、每行 12 张图。
 判定规则在出结果前写死（docs/spatial-preregistration.md）。</p>
+{f'<h2>结论</h2><div class="conclusion">{markdown_blocks(conclusion)}</div>' if conclusion else ''}
 <h2>预注册判定（主指标：合成探针垂直关系 acc2）</h2>
 <div class="tiles">{''.join(tiles)}</div>
 <h2>水平 vs 垂直关系（合成探针，二选一准确率，最终 checkpoint）</h2>{legend}{dumbbell(runs, order)}
@@ -330,12 +348,14 @@ def main():
     parser.add_argument("results", type=Path)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--json", type=Path)
+    parser.add_argument("--conclusion", type=Path, help="Markdown text shown at the top of the report")
     args = parser.parse_args()
     runs = {d.name: load_run(d) for d in sorted(args.results.iterdir()) if (d / "metrics.jsonl").exists()}
     decision = decide(runs)
     position = {p.stem: json.loads(p.read_text()) for p in (args.results / "position-probe").glob("*.json")}
     sec = secondary(runs)
-    args.out.write_text(render(runs, decision, position, sec))
+    conclusion = args.conclusion.read_text() if args.conclusion else None
+    args.out.write_text(render(runs, decision, position, sec, conclusion))
     if args.json:
         args.json.write_text(json.dumps(dict(decision, secondary=sec), indent=2) + "\n")
     print(json.dumps(decision, indent=2))

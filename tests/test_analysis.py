@@ -75,3 +75,12 @@ def test_hard_probe_contrasts_against_the_hard_seed_spread(tmp_path):
         step=5000, vertical_acc2=.85, horizontal_acc2=.9, vflip_vertical_acc2=.6, hflip_horizontal_acc2=.3)))
     runs = {d.name: load_run(d) for d in tmp_path.iterdir()}
     assert "<td><b>+10.0</b></td>" in render(runs, decide(runs))   # 10 points > twice the 2-point spread
+
+
+def test_conclusion_is_rendered_at_the_top(tmp_path):
+    write(tmp_path, "h-rope1d", .999)
+    runs = {d.name: load_run(d) for d in tmp_path.iterdir()}
+    html = render(runs, decide(runs), conclusion="First **finding**.\n\n- one\n- two <x>")
+    assert "<p>First <b>finding</b>.</p>" in html and "<li>two &lt;x&gt;</li>" in html
+    assert html.index("结论") < html.index("预注册判定")
+    assert "<h2>结论</h2>" not in render(runs, decide(runs))
