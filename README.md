@@ -128,8 +128,55 @@ NoPE hybrid relies more and more on the encoder's features as training goes on.
 
 <img src="docs/figures/accuracy.svg" alt="Relation accuracy on the harder probe" width="100%">
 
+### 4 · At a new resolution, 1D RoPE breaks and 2D-aware mixing holds
+
+The final checkpoints were scored, without retraining, on the same harder-probe images at 576 px and 768 px. That gives
+18 x 18 and 24 x 24 tokens per image instead of the 12 x 12 seen in training, so vertical neighbours sit 18 or 24
+tokens apart instead of 12. SigLIP2 interpolates its position embedding. At 384 px the evaluation code reproduces the
+archived results exactly.
+
+<img src="docs/figures/resolution.svg" alt="Zero-shot resolution transfer" width="100%">
+
+| run | vertical acc2 at 384 → 768 px | change | horizontal change |
+|---|---:|---:|---:|
+| Dense, RoPE-1D | 94.1% → 73.8% | -20.3 | -16.5 |
+| Hybrid, RoPE-1D (seeds 42 / 43) | 93.3% → 73.0% / 96.1% → 82.9% | -20.3 / -13.3 | -8.6 / -17.5 |
+| Hybrid, RoPE-1D + 2D conv | 93.0% → 84.6% | -8.4 | -1.1 |
+| Hybrid, RoPE-2D | 91.4% → 86.3% | -5.1 | -11.4 |
+| Hybrid, NoPE | 94.0% → 89.1% | -4.8 | -4.6 |
+| Hybrid, NoPE + 2D conv (seeds 42 / 43) | 90.8% → 92.6% / 91.4% → 90.3% | +1.8 / -1.1 | +2.5 / -0.3 |
+| Dense, NoPE | 94.1% → 95.4% | +1.3 | +0.2 |
+
+- **RoPE-1D causes the loss, whatever the backbone.** Models with RoPE-1D lose 13–20 points vertically at 768 px, Dense
+  and hybrid alike. NoPE models lose at most 5 points.
+- **The 2D convolution removes the loss.** With it, the NoPE hybrid keeps its accuracy on both axes in both seeds. With
+  RoPE-1D, the convolution cuts the vertical loss to 8 points.
+- **How sure this is.** Measured with the two seed pairs, the seed spread of the vertical change is 7.0 points.
+  - Dense RoPE-1D against Dense NoPE (21.6 points apart) is beyond twice that spread.
+  - The hybrid with RoPE-1D against the NoPE hybrid with the 2D convolution is 12–22 points apart across the four
+    seed pairings. Three of the four pairings exceed twice the spread (14 points); the smallest gap is 12 points.
+
+### 5 · What the layers know
+
+A linear probe reads each image token's row and column from the residual stream, layer by layer, on COCO images. To
+tell position from token order apart from position carried in the token's content, the probe is fitted on images whose
+tokens are fed in a random order, where the two are independent.
+
+<img src="docs/figures/layer-probe.svg" alt="Where each layer gets the row of an image token" width="100%">
+
+- **Every backbone works out a token's row from token order** within its first few layers (R² 0.83–0.98), but
+  almost none of its column (R² 0.15 at most, highest with RoPE-2D). The row is close to a linear function of a token's
+  index in the image (index / 12); the column (index mod 12) is not.
+- **The hybrids keep the encoder's position** (content row R² about 0.7 in every layer). Dense with RoPE-1D loses much of
+  it in its middle layers (0.37), which fits its reading of vertical relations from token order.
+- **GDN layers forget more slowly over image tokens than over text.** After one image row (12 tokens), the median head
+  keeps 62–83% of its state at image positions and 33–61% at caption positions, in every hybrid run. Decay alone
+  therefore does not stop the recurrence from spanning a row.
+
 > **In short:** with a position-aware encoder, the 2D mechanisms change *how* the backbone reads position, not *how
-> well*. The raw-pixel runs, still running, test the case where the encoder supplies no position.
+> well*, at the training resolution. At a new resolution the difference shows: reading position through RoPE-1D breaks,
+> while a 2D convolution keeps accuracy. The raw-pixel runs, still running, test the case where the encoder supplies no
+> position.
 
 ## Design of the track
 

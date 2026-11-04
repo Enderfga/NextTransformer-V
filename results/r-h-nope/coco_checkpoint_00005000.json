@@ -1,0 +1,16 @@
+{
+  "method": "gdn_hybrid",
+  "step": 5000,
+  "checkpoint": "runs/r-h-nope/checkpoint_00005000",
+  "images": 5000,
+  "order": "raster",
+  "position": "nope",
+  "conv2d": "none",
+  "visual": "raw32",
+  "bad_images": 0,
+  "caption_bpb": 1.0229692333213933,
+  "caption_bpb_without_image": 1.294894087044591,
+  "retrieval_raw": 0.5092,
+  "retrieval_pmi": 0.7626,
+  "chance": 0.2
+}
