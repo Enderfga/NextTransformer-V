@@ -3,7 +3,7 @@
 | 2D convolution, position mode | treated | baseline | gain (points) | caption BPB change | text BPB change | verdict |
 |---|---|---|---:|---:|---:|---|
 | NoPE | h-nope-conv2d | h-nope | +0.1 | +0.0025 | +0.0001 | negative |
-| RoPE-1D | h-rope1d-conv2d | h-rope1d | – | – | – | pending |
+| RoPE-1D | h-rope1d-conv2d | h-rope1d | +0.1 | +0.0022 | -0.0002 | negative |
 | NoPE, raw patches | r-h-nope-conv2d | r-h-nope | – | – | – | pending |
 
 Seed spread of the primary metric: 0.1 points (larger of the two seed pairs).
@@ -22,6 +22,7 @@ Accuracies in %. `col flip` / `row flip`: horizontal accuracy with the columns o
 | h-rope2d | gdn_hybrid | rope2d | none | siglip | 42 | 0.7604 | 0.7150 | 100.0 | 100.0 | 92.0 | 91.4 | 36.9 | 61.2 | 50.0 | 51.9 | 0.8386 | 98.1 | 3.16 |
 | h-nope-conv2d | gdn_hybrid | nope | k | siglip | 42 | 0.7717 | 0.7190 | 99.9 | 100.0 | 92.5 | 90.8 | 19.5 | 28.6 | 45.7 | 51.9 | 0.8471 | 98.2 | 3.40 |
 | h-nope-conv2d-s2 | gdn_hybrid | nope | k | siglip | 43 | 0.7727 | 0.7196 | 99.9 | 99.9 | 89.9 | 91.4 | 22.1 | 20.9 | 49.5 | 52.9 | 0.8428 | 98.2 | 3.40 |
+| h-rope1d-conv2d | gdn_hybrid | rope1d | k | siglip | 42 | 0.7635 | 0.7150 | 99.9 | 100.0 | 87.7 | 93.0 | 20.0 | 21.0 | 51.4 | 51.4 | 0.8460 | 98.3 | 3.41 |
 
 ### Harder-probe contrasts (descriptive)
 
@@ -30,6 +31,7 @@ Differences in points, treated minus baseline. **Bold**: larger than twice the s
 | treated | baseline | V | H | V, row flip | H, col flip |
 |---|---|---:|---:|---:|---:|
 | h-nope-conv2d | h-nope | -3.2 | +1.2 | **-59.1** | +0.5 |
+| h-rope1d-conv2d | h-rope1d | -0.3 | -3.1 | **-37.3** | **-7.7** |
 | h-rope2d | h-rope1d | -1.9 | +1.2 | +3.0 | **+9.2** |
 | h-nope | h-rope1d | +0.7 | +0.5 | **+29.5** | **-8.7** |
 | d-nope | d-rope1d | +0.0 | -1.3 | **+19.8** | +1.5 |

@@ -18,7 +18,10 @@
       "mode": "RoPE-1D",
       "treated": "h-rope1d-conv2d",
       "baseline": "h-rope1d",
-      "verdict": "pending"
+      "verdict": "negative",
+      "gain": 0.0009794319294809117,
+      "caption_bpb_delta": 0.002242134908921778,
+      "text_bpb_delta": -0.00020575755200780144
     },
     {
       "mode": "NoPE, raw patches",
@@ -52,10 +55,10 @@
         "treated": "h-rope1d-conv2d",
         "baseline": "h-rope1d",
         "diff": {
-          "vertical_acc2": null,
-          "horizontal_acc2": null,
-          "vflip_vertical_acc2": null,
-          "hflip_horizontal_acc2": null
+          "vertical_acc2": -0.0029673590504450953,
+          "horizontal_acc2": -0.03134479271991908,
+          "vflip_vertical_acc2": -0.37289812067260136,
+          "hflip_horizontal_acc2": -0.07684529828109202
         }
       },
       {
