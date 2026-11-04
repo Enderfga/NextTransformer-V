@@ -4,7 +4,7 @@
 |---|---|---|---:|---:|---:|---|
 | NoPE | h-nope-conv2d | h-nope | +0.1 | +0.0025 | +0.0001 | negative |
 | RoPE-1D | h-rope1d-conv2d | h-rope1d | +0.1 | +0.0022 | -0.0002 | negative |
-| NoPE, raw patches | r-h-nope-conv2d | r-h-nope | – | – | – | pending |
+| NoPE, raw patches | r-h-nope-conv2d | r-h-nope | +2.1 | -0.0019 | -0.0002 | inconclusive |
 
 Seed spread of the primary metric: 0.1 points (larger of the two seed pairs).
 
@@ -24,6 +24,7 @@ Accuracies in %. `col flip` / `row flip`: horizontal accuracy with the columns o
 | h-nope-conv2d-s2 | gdn_hybrid | nope | k | siglip | 43 | 0.7727 | 0.7196 | 99.9 | 99.9 | 89.9 | 91.4 | 22.1 | 20.9 | 49.5 | 52.9 | 0.8428 | 98.2 | 3.40 |
 | h-rope1d-conv2d | gdn_hybrid | rope1d | k | siglip | 42 | 0.7635 | 0.7150 | 99.9 | 100.0 | 87.7 | 93.0 | 20.0 | 21.0 | 51.4 | 51.4 | 0.8460 | 98.3 | 3.41 |
 | r-h-nope | gdn_hybrid | nope | none | raw32 | 42 | 0.9241 | 0.7200 | 50.8 | 97.6 | 52.0 | 79.5 | 47.8 | 21.6 | 50.5 | 50.0 | 1.0230 | 76.3 | 2.92 |
+| r-h-nope-conv2d | gdn_hybrid | nope | k | raw32 | 42 | 0.9222 | 0.7198 | 99.0 | 99.6 | 74.4 | 79.4 | 27.8 | 25.2 | 48.1 | 50.5 | 1.0176 | 78.2 | 3.16 |
 
 ### Harder-probe contrasts (descriptive)
 
@@ -33,6 +34,7 @@ Differences in points, treated minus baseline. **Bold**: larger than twice the s
 |---|---|---:|---:|---:|---:|
 | h-nope-conv2d | h-nope | -3.2 | +1.2 | **-59.1** | +0.5 |
 | h-rope1d-conv2d | h-rope1d | -0.3 | -3.1 | **-37.3** | **-7.7** |
+| r-h-nope-conv2d | r-h-nope | -0.1 | **+22.4** | +3.7 | **-20.0** |
 | h-rope2d | h-rope1d | -1.9 | +1.2 | +3.0 | **+9.2** |
 | h-nope | h-rope1d | +0.7 | +0.5 | **+29.5** | **-8.7** |
 | d-nope | d-rope1d | +0.0 | -1.3 | **+19.8** | +1.5 |
@@ -55,6 +57,8 @@ The same probe images at 384 px (12 x 12 tokens, the training resolution), 576 p
 | h-nope-conv2d | 90.8 | 94.8 | 92.6 | +1.8 | 92.5 | 93.6 | 95.0 | +2.5 | 34.4 |
 | h-nope-conv2d-s2 | 91.4 | 93.3 | 90.3 | -1.1 | 89.9 | 91.8 | 89.6 | -0.3 | 23.3 |
 | h-rope1d-conv2d | 93.0 | 91.6 | 84.6 | -8.4 | 87.7 | 89.4 | 86.6 | -1.1 | 36.3 |
+| r-h-nope | 79.5 | 68.4 | 55.7 | -23.8 | 52.0 | 51.9 | 53.2 | +1.2 | 47.7 |
+| r-h-nope-conv2d | 79.4 | 81.4 | 64.1 | -15.3 | 74.4 | 74.4 | 59.5 | -15.0 | 38.7 |
 
 Seed spread of the change at 768 px (larger of the two seed pairs): vertical 7.0 points, horizontal 8.9 points.
 
@@ -74,6 +78,7 @@ Seed spread of the change at 768 px (larger of the two seed pairs): vertical 7.0
 | h-nope-conv2d-s2 | 0.76 / 0.65 | 0.91 / 0.04 | 0.75 / 0.62 | 0.90 / 0.06 | 0.74 / 0.59 |
 | h-rope1d-conv2d | 0.74 / 0.62 | 0.94 / 0.07 | 0.73 / 0.59 | 0.88 / 0.06 | 0.69 / 0.51 |
 | r-h-nope | 0.03 / 0.01 | 0.98 / 0.05 | 0.11 / 0.02 | 0.98 / 0.05 | 0.10 / 0.02 |
+| r-h-nope-conv2d | 0.03 / 0.01 | 0.98 / 0.81 | 0.10 / 0.02 | 0.98 / 0.77 | 0.10 / 0.02 |
 
 ### Position carried by the visual tokens (ridge regression, before any backbone)
 

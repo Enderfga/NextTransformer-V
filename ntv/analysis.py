@@ -515,6 +515,21 @@ def write_figures(runs, directory):
             ["Layer 0 is the input after the visual projector. Probes are fitted on images fed in a random token order,",
              "so a token's slot in the sequence and its cell in the image are independent. Columns from order stay near 0."],
             [(f"c{i}", LABELS[n]) for i, n in enumerate(probed, 1)])
+    raw_probed = [n for n in ("r-h-nope", "r-h-nope-conv2d", "r-h-rope1d", "r-d-rope1d") if n in runs
+                  and runs[n].get("mechanism")]
+    if raw_probed:
+        depth = max(len(runs[n]["mechanism"]["layer_probe"]) for n in raw_probed)
+        series = lambda key: [(short[n], [row[key] for row in runs[n]["mechanism"]["layer_probe"]] +
+                               [None] * (depth - len(runs[n]["mechanism"]["layer_probe"]))) for n in raw_probed]
+        xs = list(range(depth))
+        out["layer-probe-raw.svg"] = figure(
+            line_panels([("row from the token grid", series("order_row_r2")),
+                         ("column from the token grid", series("order_col_r2"))], xs,
+                        [str(x) if x % 7 == 0 else "" for x in xs], 0., 1., .2, percent=False),
+            "Raw pixel patches: where each layer gets a token's row and column (COCO, linear probe R²)",
+            ["Raw patches carry no position, so all of it comes from the backbone. Probes are fitted on images fed in a",
+             "random token order, and read the slot a token sits in. Layer 0 is the input."],
+            [(f"c{i}", LABELS[n]) for i, n in enumerate(raw_probed, 1)])
     if any(final(runs[n], "vflip_vertical_acc2", "hard") is not None for n in raw):
         out["token-order-raw.svg"] = figure(dumbbell(runs, raw, keys=flip_keys, source="hard", low=0., note=""),
                                             "Where the backbone reads 2D position from (raw pixel patches)",

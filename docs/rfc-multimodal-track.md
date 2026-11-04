@@ -121,8 +121,11 @@ per update with the current kernels.
 - **Layer probe.** Every backbone derives a token's row from token order within a few layers (R² 0.83–0.98), but
   almost none of its column (≤ 0.15). The hybrids keep the encoder's position in every layer; Dense with RoPE-1D loses
   much of it in the middle layers. GDN forget gates retain more state over image tokens than over text.
-- **Pending.** The raw-patch replication pair, where the encoder supplies no position. Without the convolution, the
-  NoPE hybrid reads vertical relations from token order (97.6%) but not horizontal ones (51%, chance).
+- **Raw-patch replication** (the encoder supplies no position). The pre-registered verdict is inconclusive: vertical
+  acc2 +2.1 points, beyond twice the seed spread but short of the 5-point bar, with no BPB cost. Without the
+  convolution, the NoPE hybrid reads vertical relations from token order but cannot tell left from right (51%,
+  chance). With it, horizontal acc2 reaches 99.0%, and the layer probe finds the token's column from block 7 on.
+  The likely mechanism: a zero-padded 3 x 3 convolution stacked over GDN layers counts from the image border.
 
 ## Open questions
 

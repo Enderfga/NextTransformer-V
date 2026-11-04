@@ -27,7 +27,10 @@
       "mode": "NoPE, raw patches",
       "treated": "r-h-nope-conv2d",
       "baseline": "r-h-nope",
-      "verdict": "pending"
+      "verdict": "inconclusive",
+      "gain": 0.020568070519098924,
+      "caption_bpb_delta": -0.0019329730109497456,
+      "text_bpb_delta": -0.00021250337081368809
     }
   ],
   "required_complete": true,
@@ -66,10 +69,10 @@
         "treated": "r-h-nope-conv2d",
         "baseline": "r-h-nope",
         "diff": {
-          "vertical_acc2": null,
-          "horizontal_acc2": null,
-          "vflip_vertical_acc2": null,
-          "hflip_horizontal_acc2": null
+          "vertical_acc2": -0.0009891196834816984,
+          "horizontal_acc2": 0.22446916076845302,
+          "vflip_vertical_acc2": 0.03659742828882295,
+          "hflip_horizontal_acc2": -0.2002022244691608
         }
       },
       {

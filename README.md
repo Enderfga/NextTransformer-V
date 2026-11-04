@@ -37,11 +37,17 @@ linear mixing 2D-aware helps. The study was pre-registered.
 
 ## News
 
+- <img src="https://img.shields.io/badge/NEW-E5607E?style=flat-square" alt="New" height="18"> **2026-11-04** ·
+  Resolution transfer and a layer-by-layer probe.
+  - At a resolution not seen in training, models that read position through RoPE-1D lose 13–20 points, and the 2D
+    convolution keeps accuracy.
+  - With raw pixels, where the encoder supplies no position, the convolution is what lets the hybrid tell left from
+    right (51% → 99%).
 - <img src="https://img.shields.io/badge/NEW-E5607E?style=flat-square" alt="New" height="18"> **2026-11-04** · First
-  study: the 2D position of image tokens in hybrid backbones. It has nine compute-matched runs with frozen SigLIP2
-  tokens, two seed pairs and a pre-registered decision.
+  study: the 2D position of image tokens in hybrid backbones. It has eleven compute-matched runs, two seed pairs, a
+  raw-pixel replication and a pre-registered decision.
 - <img src="https://img.shields.io/badge/RUNNING-8B5CF6?style=flat-square" alt="Running" height="18"> **2026-11-04** ·
-  Raw-pixel replication. With raw pixels the encoder supplies no position, so the backbone must provide it.
+  More raw-pixel runs (RoPE-1D, RoPE-2D, Dense).
 - <img src="https://img.shields.io/badge/QUEUED-7A8194?style=flat-square" alt="Queued" height="18"> **2026-11-05** ·
   Backbone benchmark at 8,192 tokens (GDN, QSA hybrid, mHC).
 
@@ -72,16 +78,17 @@ things:
 Image tokens are frozen SigLIP2 features (so400m/16 at 384 px, merged 2 x 2 into 12 x 12 tokens) fed in raster order.
 Two configurations were repeated with a second seed to measure noise.
 
-### 1 · The pre-registered rule finds the 2D convolution ineffective
+### 1 · The pre-registered rule: not effective with SigLIP2 tokens, inconclusive with raw pixels
 
 | 2D convolution against | vertical acc2 gain | caption BPB change | text BPB change | verdict |
 |---|---:|---:|---:|---|
 | the NoPE hybrid | +0.1 points | +0.0025 | +0.0001 | not effective |
 | the RoPE-1D hybrid | +0.1 points | +0.0022 | -0.0002 | not effective |
+| the NoPE hybrid, raw pixel patches | +2.1 points | -0.0019 | -0.0002 | inconclusive (section 6) |
 
-The rule needed a gain of at least 5 points, above twice the seed spread, which is 0.1 points. It could not be met,
-because the primary metric is saturated: every run reaches 99.9–100% vertical acc2 on the synthetic probe. There are
-two reasons. The training mix contains images with the probe's layout, and SigLIP2 tokens carry their own position:
+The rule needed a gain of at least 5 points, above twice the seed spread, which is 0.1 points. With SigLIP2 tokens it
+could not be met, because the primary metric is saturated: every SigLIP2 run reaches 99.9–100% vertical acc2 on the
+synthetic probe. There are two reasons. The training mix contains images with the probe's layout, and SigLIP2 tokens carry their own position:
 ridge regression recovers a token's row and column with R² 0.86 / 0.89, against 0.03 / 0.00 for raw pixel patches.
 
 ### 2 · The backbones read position from different sources
@@ -173,10 +180,50 @@ tokens are fed in a random order, where the two are independent.
   keeps 62–83% of its state at image positions and 33–61% at caption positions, in every hybrid run. Decay alone
   therefore does not stop the recurrence from spanning a row.
 
-> **In short:** with a position-aware encoder, the 2D mechanisms change *how* the backbone reads position, not *how
-> well*, at the training resolution. At a new resolution the difference shows: reading position through RoPE-1D breaks,
-> while a 2D convolution keeps accuracy. The raw-pixel runs, still running, test the case where the encoder supplies no
-> position.
+### 6 · Without position from the encoder, the 2D convolution is what gives the hybrid its columns
+
+Raw 32 px patches (3,072 pixel values per token, no encoder) carry no position, so everything must come from the
+backbone. This is the pre-registered replication pair: the NoPE hybrid with and without the 2D convolution.
+
+| raw patches, hybrid with NoPE | without 2D conv | with 2D conv |
+|---|---:|---:|
+| vertical acc2, synthetic probe (primary metric) | 97.6% | 99.6% |
+| horizontal acc2, synthetic probe | 50.8% (chance) | **99.0%** |
+| vertical / horizontal acc2, harder probe | 79.5% / 52.0% | 79.4% / **74.4%** |
+| caption BPB / text BPB | 0.9241 / 0.7200 | 0.9222 / 0.7198 |
+| COCO caption BPB / 5-way retrieval | 1.0230 / 76.3% | 1.0176 / 78.2% |
+
+- **Pre-registered verdict: inconclusive.** On the primary metric the convolution gains 2.1 points. That is beyond twice
+  the seed spread (0.1 points) but short of the 5-point bar. Neither caption nor text BPB gets worse.
+- **Without the convolution, the hybrid cannot tell left from right.** It reads vertical relations from token order:
+  reversing the rows inverts them (2.6%). Its horizontal accuracy stays at chance.
+- **With the convolution, it learns both.** On the synthetic probe, horizontal accuracy goes from chance to 99.0%. On
+  the harder probe it rises by 22.4 points, beyond twice that probe's seed spread (5.3). Reversing either the rows or
+  the columns now inverts the answers (4.2% each), so both axes are read from the token grid.
+
+The layer probe shows where the columns come from:
+
+<img src="docs/figures/layer-probe-raw.svg" alt="Raw pixel patches: where each layer gets a token's row and column" width="100%">
+
+- **Rows.** Both models work out a token's row from token order within two layers.
+- **Columns without the convolution.** The model never recovers them (R² 0.05).
+- **Columns with the convolution.** They appear by block 7 (R² 0.84). A 3 x 3 convolution with zero padding sees the
+  image border, and stacking it across GDN layers lets the model count from the edge. Convolutional networks are known
+  to encode absolute position the same way. Seven GDN layers with the convolution precede that block, enough to reach
+  the middle of a 12-column grid.
+
+At 768 px both raw-patch models lose accuracy (vertical -23.8 and -15.3 points). Here the input itself changes too,
+because each 32 px patch then covers a smaller, blurrier part of the image. These numbers are in
+[`results/tables.md`](results/tables.md) but are not interpreted.
+
+> **In short:**
+> - **Where position comes from.** With a position-aware encoder, the 2D position of image tokens comes mostly from
+>   the encoder. The backbone adds a token's row from token order, but not its column.
+> - **What a 2D-aware linear mixer changes.** It changes *how* position is read, not *how well*, at the training
+>   resolution.
+> - **Where that difference matters.** At a new resolution, reading position through RoPE-1D breaks, while the 2D
+>   convolution keeps accuracy. When the encoder supplies no position at all, the convolution is what lets a hybrid
+>   locate a token's column.
 
 ## Design of the track
 
